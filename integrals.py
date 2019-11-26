@@ -10,7 +10,7 @@ from scipy.interpolate import interp2d
 
 import physics as phys
 
-dir_str = '/Users/hongwan/Dropbox (MIT)/Millicharged_Hydrogen/code/data/'
+dir_str = '/home/hongwanl/millicharged_DM_with_bath/data/'
 J_over_r_arr      = np.array(json.load(open(dir_str+'JOverrTable.txt')))
 J_diff_over_r_arr = np.array(json.load(open(dir_str+'JDiffOverrTable.txt')))
 J_Vrel_over_r_arr = np.array(json.load(open(dir_str+'JVrelOverrTable.txt')))
