@@ -659,15 +659,15 @@ def DM_baryon_ODE(
         var[0], var[1], var[2], var[3], var[4], var[5]
     )
 
-    # print(
-    #     rs, 
-    #     Delta_CMB_b, 
-    #     Delta_b_m, 
-    #     T_C_var, 
-    #     log_V_bm, 
-    #     log_V_mC,
-    #     xe
-    # )
+#     print(
+#         rs, 
+#         Delta_CMB_b, 
+#         Delta_b_m, 
+#         T_C_var, 
+#         log_V_bm, 
+#         log_V_mC,
+#         xe
+#     )
     # print(dlog_V_bm_dz(
     #             rs, Delta_CMB_b, Delta_b_m, T_C_var, 
     #             log_V_bm, log_V_mC, xe
