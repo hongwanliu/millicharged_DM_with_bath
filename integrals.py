@@ -366,7 +366,8 @@ def I_V_minus_I_v(m_chi, Q, T_chi, T_m, V_rel, xe, rs, species):
         return prefac * K_diff_over_r(xi, r)
     elif species == 'He':
         bohr_rad = phys.bohr_rad/(phys.hbar*phys.c) # in eV^-1
-        xi = 1.69/2/(bohr_rad * mu * u)
+        # removed factor of /2 here, fixing an error here on 20201201. 
+        xi = 1.69/(bohr_rad * mu * u)
         return 4 * prefac * K_diff_over_r(xi, r)
     else:
         raise TypeError('invalid species.')
@@ -445,7 +446,8 @@ def I_cap_V(m_chi, Q, T_chi, T_m, V_rel, xe, rs, species):
             return prefac * K_Vrel_over_r(xi, r)
         elif species == 'He':
             bohr_rad = phys.bohr_rad/(phys.hbar*phys.c) # in eV^-1
-            xi = 1.69/2/(bohr_rad * mu * u)
+            # removed factor of /2 here, fixing an error here on 20201201. 
+            xi = 1.69/(bohr_rad * mu * u)
             return 4 * prefac * K_Vrel_over_r(xi, r)
         else:
             raise TypeError('invalid species.')
