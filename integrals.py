@@ -228,8 +228,8 @@ def m_phot(xe, rs, T_m):
     # T in eV, returns mass in eV. 
     ele_squared = 4*np.pi*phys.alpha
     ne_eV_cubed = xe*phys.nH*rs**3*(phys.hbar*phys.c)**3
-
-    return np.sqrt(4*np.pi*ne_eV_cubed*ele_squared/T_m)
+    # 20201201: lambda_D^2 = T_b^2 / (n_e e^2), m = 2*pi/lambda_D 
+    return 2*np.pi*np.sqrt(ne_eV_cubed*ele_squared/T_m)
 
 def m_dark_phot(f, alpha, beta, m_chi, Q_d, rs, T_zeta):
     # Consistent with SM m_phot, taking only the temperature
@@ -242,8 +242,9 @@ def m_dark_phot(f, alpha, beta, m_chi, Q_d, rs, T_zeta):
     ele_squared = 4*np.pi*phys.alpha*Q_d**2
     n_eV_cubed  = alpha*beta*phys.rho_DM*rs**3/m_chi 
     n_eV_cubed  *= (phys.hbar*phys.c)**3
-
-    return np.sqrt(4*np.pi*n_eV_cubed*ele_squared/T_zeta)
+    # 20201201: lambda_D^2 = T_b^2 / (n_e e^2), m = 2*pi/lambda_D 
+    
+    return 2*np.pi*np.sqrt(n_eV_cubed*ele_squared/T_zeta)
 
 def I_v(m_chi, Q, T_chi, T_m, V_rel, xe, rs, species):
     
