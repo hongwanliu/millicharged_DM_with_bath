@@ -45,7 +45,7 @@ class Velocity_Fluctuations:
 
     ################# VELOCITY CORRELATORS ######################
 
-    def get_xiv(self, x_ary): 
+    def xi_v(self, x_ary): 
         """Velocity correlation function. 
         
         This is <v^i v_i>(x) or <V V>(x), in km^2/s^2. 
@@ -69,7 +69,7 @@ class Velocity_Fluctuations:
 
         return (cpar_ary + 2 * cperp_ary) * self.sigma1D**2
 
-    def get_xiv2(self, x_ary): 
+    def xi_v2(self, x_ary): 
         """Velocity squared correlation function. 
         
         This is <v^2 v^2>(x), in km^4/s^4. 
@@ -93,7 +93,7 @@ class Velocity_Fluctuations:
 
         return 2 * (cpar_ary**2 + 2 * cperp_ary**2) * self.sigma1D**4
 
-    def get_Delta2v(self, k_ary=None, x_ary=np.arange(0, 1000, 0.001), use_logfft=False, logrmin=-4, logrmax=4): 
+    def Delta2_v(self, k_ary=None, x_ary=np.arange(0, 1000, 0.001), use_logfft=False, logrmin=-4, logrmax=4): 
         """Dimensionless power spectrum of V. 
 
         Result is in km^2/s^2.  
@@ -119,21 +119,21 @@ class Velocity_Fluctuations:
         
         if use_logfft: 
 
-            k_fft, P_fft = logfft.fftj0(self.get_xiv, logrmin, logrmax) 
+            k_fft, P_fft = logfft.fftj0(self.xi_v, logrmin, logrmax) 
 
             return (k_fft, P_fft * k_fft**3 / (2 * np.pi**2))
 
         else:
         
-            xiv_ary = self.get_xiv(x_ary)
+            xi_v_ary = self.xi_v(x_ary)
 
             return (k_ary, np.array([
                 2. / np.pi * k**2 * np.trapz(
-                    xiv_ary * x_ary * np.sin(k * x_ary), x_ary
+                    xi_v_ary * x_ary * np.sin(k * x_ary), x_ary
                 ) for k in k_ary
             ]))
 
-    def get_Delta2v2(self, k_ary=None, x_ary=np.arange(0, 1000, 0.001), use_logfft=False, logrmin=-4, logrmax=4): 
+    def Delta2_v2(self, k_ary=None, x_ary=np.arange(0, 1000, 0.001), use_logfft=False, logrmin=-4, logrmax=4): 
         """Dimensionless power spectrum of v^2 
         
         Result is in km^4/s^4.  
@@ -160,17 +160,17 @@ class Velocity_Fluctuations:
 
         if use_logfft: 
 
-            k_fft, P_fft = logfft.fftj0(self.get_xiv2, logrmin, logrmax)
+            k_fft, P_fft = logfft.fftj0(self.xi_v2, logrmin, logrmax)
 
             return (k_fft, P_fft * k_fft**3 / (2 * np.pi**2))
 
         else:
 
-            xiv2_ary = self.get_xiv2(x_ary)
+            xi_v2_ary = self.xi_v2(x_ary)
 
             return (k_ary, np.array([
                 2. / np.pi * k**2 * np.trapz(
-                    xiv2_ary * x_ary * np.sin(k * x_ary), x_ary
+                    xi_v2_ary * x_ary * np.sin(k * x_ary), x_ary
                 ) for k in k_ary
             ]))
 
@@ -237,7 +237,7 @@ class Velocity_Fluctuations:
     def bias_f(self, f, v): 
         """Bias parameter. 
         
-        This parameter relates the v^2 (dimensionless) correlation function to the (dimensionless) correlation function of f(v^2) at long distances. It is given by (3/2) * (1 - <v^2 f> / (<f> vrms)), where vrms = <v^2> - <v>^2. 
+        This parameter relates the v^2 (dimensionless) correlation function to the (dimensionless) correlation function of f(v^2) at long distances. It is given by (3/2) * (1 - <v^2 f> / (<f> vrms^2)), where vrms^2 = <v^2> - <v>^2. 
 
         The result is dimensionless. 
 
@@ -309,11 +309,13 @@ class Fluctuations:
         self.var    = self.v_fluc.var_f(self.f_v, v_ary) 
         self.b      = self.v_fluc.bias_f(self.f_v, v_ary)
 
-        # RETURN TO THIS, INCORRECT FOR NOW.  
-        self.dT2 = self.v_fluc.var_f(
-            interp1d(v_ary[:-1], (np.diff(f_ary) / np.diff(v_ary))**2), 
-            v_ary[:-1]
+        self.mean_df_dv_sq = self.v_fluc.mean_f(
+            interp1d(v_ary[1:], (np.diff(f_ary) / np.diff(v_ary))**2), 
+            v_ary[1:]
         )
+
+        # Will be initialized with first call of self.xi_f
+        self.xi_f_int = None
 
     def xi_f_numerical(self, x_ary): 
         """Numerical calculation of the correlation function. 
@@ -327,6 +329,7 @@ class Fluctuations:
 
         Returns
         -------
+        ndarray
         """
 
         u_ary = self.v_ary / self.v_fluc.sigma1D
@@ -411,7 +414,229 @@ class Fluctuations:
             u_ary, axis=-1
         )
 
+    def xi_f_large_dist(self, x_ary): 
+        """Numerical calculation of the correlation function at large distances. 
+
+        xi_f has units of f^2. 
+
+        Parameters
+        ----------
+        x_ary : ndarray
+            Distances in Mpc. 
+
+        Returns
+        -------
+        """ 
+
+        return (self.v_fluc.xi_v2(x_ary) / self.v_fluc.sigma3D**4 
+            * self.b**2 * self.mean**2 
+        )
+
+    def xi_f_short_dist(self, x_ary): 
+        """Numerical calculation of the correlation function at small distances. 
+
+        xi_f has units of f^2. 
+
+        Parameters
+        ----------
+        x_ary : ndarray
+            Distances in Mpc. 
+
+        Returns
+        -------
+        ndarray
+        """ 
+
+        tr_one_minus_c2 = 3. - (
+            self.v_fluc.cparint(x_ary)**2 + 2 * self.v_fluc.cperpint(x_ary)**2
+        )
+
+        return self.var - (
+            1. / 6. * tr_one_minus_c2
+            * self.mean_df_dv_sq * self.v_fluc.sigma1D**2 
+        )
+
+    def xi_f(self, x_ary=None, short_thres=1, large_thres=200, interp=True): 
+        """Correlation function. 
+
+        xi_f has units of f^2. Combines the short, numerical and long distance 
+        results. 
+
+        Parameters
+        ----------
+        x_ary : ndarray
+            Distances in Mpc. Leave as None for initialization of self.xi_f_int.
+        short_thres : float
+            Threshold for short distance approximation in Mpc. 
+        large_thres : float
+            Threshold for large distance approximation in Mpc. 
+        interp : bool
+            If True, uses interpolation function. 
+
+        Returns
+        -------
+        ndarray
+        """
+
+        # Initializes on first call. 
+        if self.xi_f_int is None: 
+
+            x_int_ary = np.concatenate((
+                np.arange(0, 1, 0.005), 
+                np.logspace(0, np.log10(200), num=200), 
+                np.logspace(np.log10(200), 3, num=5000)[1:]
+            ))
+
+            # To stop this flag from tripping when we call recursively next step.
+            self.xi_f_int = 0
+
+            self.xi_f_int = interp1d(
+                x_int_ary, self.xi_f(x_int_ary, interp=False), kind=9,
+                bounds_error=False, fill_value=(self.var, 0.)
+            )
+
+            if x_ary is None: 
+
+                return None
+
+        if interp: 
+
+            return self.xi_f_int(x_ary) 
+
+        else: 
+
+            xi_f_short_ary = self.xi_f_short_dist(x_ary[x_ary < short_thres])
+
+            inter_x_ary = x_ary[(x_ary >= short_thres) & (x_ary < large_thres)]
+
+            inter_length = large_thres - short_thres
+
+            xi_f_computed_ary = self.xi_f_numerical(inter_x_ary)
+            xi_f_short_inter_ary = self.xi_f_short_dist(inter_x_ary) 
+            xi_f_large_inter_ary = self.xi_f_large_dist(inter_x_ary) 
+
+
+
+            xi_f_computed_ary = smooth(
+                inter_x_ary, xi_f_short_inter_ary, xi_f_computed_ary, 
+                short_thres + 0.05, 3.
+            )
+
+            xi_f_computed_ary = smooth(
+                inter_x_ary, xi_f_computed_ary, xi_f_large_inter_ary, 
+                short_thres + inter_length*0.75, short_thres + inter_length*0.95
+            )
+
+            xi_f_large_ary    = self.xi_f_large_dist(
+                x_ary[(x_ary >= large_thres) & (x_ary <= 1e3)]
+            )
+            xi_f_exceed_ary   = np.zeros_like(x_ary[x_ary > 1e3]) 
+
+            return np.concatenate((
+                xi_f_short_ary, xi_f_computed_ary, 
+                xi_f_large_ary, xi_f_exceed_ary
+            ))
+
+    def Delta2_f(
+        self, k_ary=None, x_ary=np.arange(0, 5000, 0.001), use_logfft=True, 
+        logrmin=-4, logrmax=4
+    ):
+        """Dimensionless power spectrum of f. 
+
+        Units of f^2. Uses self.xi_f_int to interpolate. 
+
+        Parameters
+        ----------
+        k_ary : ndarray, optional
+            Wavenumber in Mpc. Leave as None if using log-FFT. 
+        x_ary : ndarray, optional
+            Distances in Mpc. Leave as default if using log-FFT. 
+        use_logfft : bool, optional
+            If True, uses logFFT. Otherwise, numerical integration. 
+        float, optional
+            Minimum r value to use for log-FFT. 
+        logrmax : float, optional
+            Maximum r value to use for log-FFT. 
+
+        Returns
+        -------
+        ndarray
+        """
+
+        if self.xi_f_int is None: 
+
+            self.xi_f() 
         
+        if use_logfft: 
+
+            (k_fft, P_fft) = logfft.fftj0(self.xi_f_int, logrmin, logrmax)
+
+            return (k_fft, P_fft * k_fft**3 / (2 * np.pi**2))
+
+        else:
+        
+            xi_f_ary = self.xi_f(x_ary)
+
+            return (k_ary, np.array([
+                2. / np.pi * k**2 * np.trapz(
+                    xi_f_ary * x_ary * np.sin(k * x_ary), x_ary
+                ) for k in k_ary
+            ]))
+        
+        
+
+def smooth(x_ary, f1_ary, f2_ary, x_low, x_high, rel_width=3.): 
+    """Smoothing between output in two regimes.
+
+    Avoids sudden transitions when calculating the same quantity but under
+    two different approximations. Weights the two results and averages between
+    them. Done in log space with tanh weighting.  
+
+    Parameters
+    ----------
+    x_ary : ndarray
+        Abscissa for f1_ary and f2_ary. 
+    f1_ary : ndarray
+        First functional output. 
+    f2_ary : ndarray
+        Second functional output. 
+    x_low : float
+        Approximate point below which we should take f1_ary values. 
+    x_high : float
+        Approximate point above which we should take f2_ary values. 
+    rel_width : float
+        Width of the tanh function. Default is that at x_high (x_low) the 
+        weight is tanh(3) (tanh(-3)). 
+
+    Returns
+    -------
+    ndarray
+        The smooth interpolation between f1_ary and f2_ary. 
+    
+    Notes
+    -----
+    f1_ary is assumed to apply at low x, and f2_ary at high. 
+
+    """
+
+    if not x_low < x_high: 
+
+        raise TypeError('x specifications are not in order.')
+
+    x0 = np.exp((np.log(x_high) + np.log(x_low)) / 2)
+
+    log_width = (np.log(x0) - np.log(x_low)) / rel_width
+
+    weight = 0.5 + 0.5*np.tanh(
+        (np.log(x_ary) - np.log(x0)) / log_width
+    )
+
+    return (1. - weight) * f1_ary + weight * f2_ary 
+
+
+
+
+
 
 
 

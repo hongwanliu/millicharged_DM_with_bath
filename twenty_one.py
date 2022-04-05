@@ -78,8 +78,8 @@ def xc(z_ary, Tb_ary):
         * T_star / 3. / A10 / (phys.TCMB(1. + z_ary) / phys.kB)
     )
 
-def get_T21(z_ary, xA_ary, Tb_ary, TS_equal_Tb=False): 
-    """Translates baryon temperature to 21-cm brightness.  
+def T21(z_ary, xA_ary, Tb_ary, TS_equal_Tb=False): 
+    """21-cm brightness temperature.  
 
     Parameters
     ----------
