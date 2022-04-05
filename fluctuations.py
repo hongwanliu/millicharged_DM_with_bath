@@ -1,4 +1,4 @@
-""" Functions for calculating fluctuations from temperature data. 
+""" Calculating fluctuations from data. 
 """
 
 import numpy as np
@@ -267,10 +267,43 @@ class Velocity_Fluctuations:
         ))
 
 
-# class Temperature_Fluctuations:
+class Temperature_Fluctuations:
 
-#     def __init__(self, v_ary, Tb_ary, sigma3D=29.): 
+    def __init__(self, z_ary, v_ary, Tb_ary, xA=None, sigma3D=29.): 
+        """Structure for temperature fluctuations. 
 
+        Parameters
+        ----------
+        z_ary : ndarray
+            Array of redshifts.
+        v_ary : ndarray
+            Baryon-CDM relative velocity abscissa in km/s.  
+        Tb_ary : ndarray
+            Baryon temperature in K, dimensions z_ary x v_ary. 
+        x_A : function, optional
+            Returns Lyman-alpha coupling, dimensions z_ary. If none, spin temperature is equal to baryon temperature. 
+        sigma3D : float
+            3D velocity dispersion in km/s. 
+
+        Attributes
+        ----------
+        """
+
+    
+
+
+
+
+
+        
+        
+
+
+
+
+
+
+        
 
 
 
