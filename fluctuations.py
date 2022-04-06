@@ -303,7 +303,7 @@ class Fluctuations:
 
         self.v_fluc = Velocity_Fluctuations(sigma3D=sigma3D)
 
-        self.f_v    = interp1d(v_ary, f_ary, axis=0)
+        self.f_v    = interp1d(v_ary, f_ary, axis=0, kind=2)
 
         self.mean   = self.v_fluc.mean_f(self.f_v, v_ary) 
         self.var    = self.v_fluc.var_f(self.f_v, v_ary) 
@@ -456,7 +456,7 @@ class Fluctuations:
             * self.mean_df_dv_sq * self.v_fluc.sigma1D**2 
         )
 
-    def xi_f(self, x_ary=None, short_thres=1, large_thres=200, interp=True): 
+    def xi_f(self, x_ary=None, short_thres=1., large_thres=300., interp=True): 
         """Correlation function. 
 
         xi_f has units of f^2. Combines the short, numerical and long distance 
@@ -481,19 +481,58 @@ class Fluctuations:
         # Initializes on first call. 
         if self.xi_f_int is None: 
 
-            x_int_ary = np.concatenate((
-                np.arange(0, 1, 0.005), 
-                np.logspace(0, np.log10(200), num=200), 
-                np.logspace(np.log10(200), 3, num=5000)[1:]
+            x_short_ary = np.arange(0, 30, 0.1)
+            x_numerical_ary = np.logspace(-1, np.log10(301.), num=200)
+            x_large_ary = np.concatenate((
+                np.logspace(1, 2, num=100)[:-1],
+                np.logspace(2, np.log10(350.), num=10000),
+                np.logspace(np.log10(350.), 3, num=100)[1:]
             ))
 
-            # To stop this flag from tripping when we call recursively next step.
-            self.xi_f_int = 0
+            xi_f_short_ary       = self.xi_f_short_dist(x_short_ary)
+            xi_f_numerical_ary   = self.xi_f_numerical(x_numerical_ary) 
+            xi_f_large_ary       = self.xi_f_large_dist(x_large_ary) 
 
-            self.xi_f_int = interp1d(
-                x_int_ary, self.xi_f(x_int_ary, interp=False), kind=9,
-                bounds_error=False, fill_value=(self.var, 0.)
+            # xi_f_short_inter_ary = self.xi_f_short_dist(x_numerical_ary)
+            # xi_f_large_inter_ary = self.xi_f_large_dist(x_numerical_ary) 
+            # inter_length = 200. - 1. 
+
+            # xi_f_computed_ary = smooth(
+            #     x_numerical_ary, xi_f_short_inter_ary, 
+            #     xi_f_numerical_ary, 
+            #     1., 3.
+            # )
+
+            # xi_f_computed_ary = smooth(
+            #     x_numerical_ary, xi_f_numerical_ary, 
+            #     xi_f_large_inter_ary, 
+            #     1. + inter_length*0.15, 1. + inter_length*0.95
+            # )
+
+
+            xi_f_small_int = interp1d(x_short_ary, xi_f_short_ary, kind=9)
+
+            xi_f_numerical_int = interp1d(
+                x_numerical_ary, xi_f_numerical_ary, kind=9
             )
+
+            xi_f_large_int = interp1d(x_large_ary, xi_f_large_ary, kind=9)
+
+            def interp_func(xx_ary):
+
+                small     = xi_f_small_int(xx_ary[xx_ary < short_thres])
+                numerical = xi_f_numerical_int(xx_ary[
+                    (xx_ary >= short_thres) 
+                    & (xx_ary <= large_thres)
+                ])
+                large     = xi_f_large_int(
+                    xx_ary[(xx_ary > large_thres) & (xx_ary <= 1e3)]
+                ) 
+                exceed    = np.zeros_like(xx_ary[xx_ary > 1e3])
+
+                return np.concatenate((small, numerical, large, exceed))
+
+            self.xi_f_int = interp_func  
 
             if x_ary is None: 
 
@@ -507,28 +546,27 @@ class Fluctuations:
 
             xi_f_short_ary = self.xi_f_short_dist(x_ary[x_ary < short_thres])
 
-            inter_x_ary = x_ary[(x_ary >= short_thres) & (x_ary < large_thres)]
-
-            inter_length = large_thres - short_thres
+            inter_x_ary = x_ary[(x_ary >= short_thres) & (x_ary <= large_thres)]
 
             xi_f_computed_ary = self.xi_f_numerical(inter_x_ary)
-            xi_f_short_inter_ary = self.xi_f_short_dist(inter_x_ary) 
-            xi_f_large_inter_ary = self.xi_f_large_dist(inter_x_ary) 
 
+            # inter_length = large_thres - short_thres
 
+            # xi_f_short_inter_ary = self.xi_f_short_dist(inter_x_ary) 
+            # xi_f_large_inter_ary = self.xi_f_large_dist(inter_x_ary) 
 
-            xi_f_computed_ary = smooth(
-                inter_x_ary, xi_f_short_inter_ary, xi_f_computed_ary, 
-                short_thres + 0.05, 3.
-            )
+            # xi_f_computed_ary = smooth(
+            #     inter_x_ary, xi_f_short_inter_ary, xi_f_computed_ary, 
+            #     short_thres + 0.05, 3.
+            # )
 
-            xi_f_computed_ary = smooth(
-                inter_x_ary, xi_f_computed_ary, xi_f_large_inter_ary, 
-                short_thres + inter_length*0.75, short_thres + inter_length*0.95
-            )
+            # xi_f_computed_ary = smooth(
+            #     inter_x_ary, xi_f_computed_ary, xi_f_large_inter_ary, 
+            #     short_thres + inter_length*0.75, short_thres + inter_length*0.95
+            # )
 
             xi_f_large_ary    = self.xi_f_large_dist(
-                x_ary[(x_ary >= large_thres) & (x_ary <= 1e3)]
+                x_ary[(x_ary > large_thres) & (x_ary <= 1e3)]
             )
             xi_f_exceed_ary   = np.zeros_like(x_ary[x_ary > 1e3]) 
 
