@@ -267,15 +267,13 @@ class Velocity_Fluctuations:
 
 class Fluctuations:
 
-    def __init__(self, z_ary, v_ary, f_ary, sigma3D=29.): 
+    def __init__(self, v_ary, f_ary, sigma3D=29.): 
         """Structure for fluctuations. 
 
         Although written with T21 in mind, can be extended to anything. 
 
         Parameters
         ----------
-        z_ary : ndarray
-            Array of redshifts.
         v_ary : ndarray
             Baryon-CDM relative velocity abscissa in km/s.  
         f_ary : ndarray
@@ -297,13 +295,12 @@ class Fluctuations:
             <f'^2> ...
         """
 
-        self.z_ary = z_ary
         self.v_ary = v_ary
         self.f_ary = f_ary 
 
         self.v_fluc = Velocity_Fluctuations(sigma3D=sigma3D)
 
-        self.f_v    = interp1d(v_ary, f_ary, axis=0, kind=2)
+        self.f_v    = interp1d(v_ary, f_ary, kind=2)
 
         self.mean   = self.v_fluc.mean_f(self.f_v, v_ary) 
         self.var    = self.v_fluc.var_f(self.f_v, v_ary) 
@@ -670,32 +667,3 @@ def smooth(x_ary, f1_ary, f2_ary, x_low, x_high, rel_width=3.):
     )
 
     return (1. - weight) * f1_ary + weight * f2_ary 
-
-
-
-
-
-
-
-
-
-
-    
-
-
-
-
-
-
-        
-        
-
-
-
-
-
-
-        
-
-
-
