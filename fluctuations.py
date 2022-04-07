@@ -211,7 +211,9 @@ class Velocity_Fluctuations:
         float
         """
 
-        return 4 * np.pi * np.trapz(self.MB(v) * v**2 * f(v), v, axis=0)
+        return 4 * np.pi * np.trapz(
+            self.MB(v) * v**2 * np.moveaxis(f(v), 0, -1), v
+        )
 
     def var_f(self, f, v): 
         """Variance of function f over Maxwell-Boltzmann PDF. 
@@ -231,7 +233,9 @@ class Velocity_Fluctuations:
         """
 
         return 4 * np.pi * np.trapz(
-            self.MB(v) * v**2 * (f(v) - self.mean_f(f, v))**2, v, axis=0
+            self.MB(v) * v**2 * np.moveaxis(
+                (f(v) - self.mean_f(f, v))**2, 0, -1
+            ), v
         )
 
     def bias_f(self, f, v): 
@@ -257,11 +261,13 @@ class Velocity_Fluctuations:
         Vrms_sq = self.mean_f(lambda x:x**2, v)
 
         if np.abs(Vrms_sq / self.sigma3D**2 - 1.) > 1e-2: 
+            print(Vrms_sq)
             warnings.warn('Computed Vrms_sq is not self.sigma3D.')
 
         return 3 / 2 * (1. - (
-            4. * np.pi * np.trapz(self.MB(v) * v**4 * f(v), v, axis=0)
-            / Vrms_sq / self.mean_f(f, v)
+            4. * np.pi * np.trapz(
+                self.MB(v) * v**4 * np.moveaxis(f(v), 0, -1), v
+            ) / Vrms_sq / self.mean_f(f, v)
         ))
 
 
@@ -277,39 +283,66 @@ class Fluctuations:
         v_ary : ndarray
             Baryon-CDM relative velocity abscissa in km/s.  
         f_ary : ndarray
-            Function values, e.g. baryon temperature in K, dimensions v_ary x z_ary  
+            Function values, e.g. baryon temperature in K, dimensions v_ary x ... . 
         sigma3D : float
             3D velocity dispersion in km/s. 
 
         Attributes
         ----------
+        x_short_ary : ndarray
+            x values for short-distance approximation for correlation function, 
+            for constructing the interpolator.
+        x_numerical_ary : ndarray
+            x values for numerical calculation for correlation function, 
+            for constructing the interpolator.
+        x_large_ary : ndarray
+            x values for large-distance approximation for correlation function, 
+            for constructing the interpolator.
         v_fluc : Velocity_Fluctuations
             Class containing velocity fluctuations information. 
         mean : float or ndarray 
-            Mean value of f integrated over v_ary, dimensions z_ary. 
+            Mean value of f integrated over v_ary, dimensions ... . 
         var : float or ndarray
-            Variance of f integrated over v_ary, dimensions z_ary. 
+            Variance of f integrated over v_ary, dimensions ... . 
         b : float or ndarray
-            Bias parameter of f, dimensions z_ary. 
-        dT2 : float or ndarray
-            <f'^2> ...
+            Bias parameter of f, dimensions ... . 
+        mean_df_dv_sq : float or ndarray
+            <f'^2>, dimensions ... .
+        integ_dW_cached : ndarray
+            Integral of W - lim_{R \to 0} W with respect to y = cos theta_b, dimensions 
+            x_numerical_ary x v_ary x v_ary. 
+        xi_f_int : function
+            Interpolation function for spatial correlation function, units f^2. 
         """
 
         self.v_ary = v_ary
         self.f_ary = f_ary 
 
+        # Default binning for constructing correlation function interpolation. 
+        self.x_short_ary = np.arange(0, 30, 0.1)
+        self.x_numerical_ary = np.logspace(-1, np.log10(301.), num=200)
+        self.x_large_ary = np.concatenate((
+            np.logspace(1, 2, num=100)[:-1],
+            np.logspace(2, np.log10(350.), num=10000),
+            np.logspace(np.log10(350.), 3, num=100)[1:]
+        ))
+
         self.v_fluc = Velocity_Fluctuations(sigma3D=sigma3D)
 
-        self.f_v    = interp1d(v_ary, f_ary, kind=2)
+        self.f_v    = interp1d(v_ary, f_ary, axis=0, kind=2, bounds_error=False, fill_value=0.)
 
         self.mean   = self.v_fluc.mean_f(self.f_v, v_ary) 
         self.var    = self.v_fluc.var_f(self.f_v, v_ary) 
         self.b      = self.v_fluc.bias_f(self.f_v, v_ary)
 
         self.mean_df_dv_sq = self.v_fluc.mean_f(
-            interp1d(v_ary[1:], (np.diff(f_ary) / np.diff(v_ary))**2), 
-            v_ary[1:]
+            interp1d(v_ary[1:], np.moveaxis(
+                np.diff(np.moveaxis(f_ary, 0, -1), axis=-1) 
+                / np.diff(v_ary), -1, 0
+            )**2, axis=0), v_ary[1:]
         )
+
+        self.integ_dW_cached = None 
 
         # Will be initialized with first call of self.xi_f
         self.xi_f_int = None
@@ -331,6 +364,19 @@ class Fluctuations:
 
         u_ary = self.v_ary / self.v_fluc.sigma1D
         u_ary = np.linspace(u_ary[0], u_ary[-1], 70)
+
+        # Do everything in terms of sp = (u1 + u2) / 2, sm = (u1 - u2) / 2. 
+        sp_ary = np.array(u_ary)
+        sm_sub_ary = np.concatenate((
+            np.linspace(-u_ary[-1]/2, -0.3, 22),
+            np.flipud(-np.logspace(-4, np.log10(0.3), 16)[:-1]),
+            [0],
+            np.logspace(-4, np.log10(0.3), 16)[:-1], 
+            np.linspace(0.3, u_ary[-1]/2, 22)
+        ))
+        all_pts_ary = np.union1d(sp_ary, sm_sub_ary)
+        sm_ary = all_pts_ary[all_pts_ary <= u_ary[-1]/2]
+
         y_ary = np.linspace(-1, 1, 50)
 
         def R(y_ary=y_ary, x_ary=x_ary): 
@@ -342,14 +388,15 @@ class Fluctuations:
             return np.sqrt(term_1 + term_2) 
 
         def dW(
-            y_ary=y_ary, x_ary=x_ary, u1_ary=u_ary, u2_ary=u_ary
+            y_ary=y_ary, x_ary=x_ary, sp_ary=sp_ary, sm_ary=sm_ary
         ): 
 
             one_minus_R_sq = 1. - R(y_ary, x_ary)**2 
-            u1_sq_plus_u2_sq = u1_ary[:,None]**2 + u2_ary[None,:]**2 
+
+            u1_sq_plus_u2_sq = 2*sp_ary[:,None]**2 + 2*sm_ary[None,:]**2 
 
             term_1 = np.einsum(
-                'ij,k,l->ijkl', 1./(R(y_ary, x_ary)*np.sqrt(one_minus_R_sq)), u1_ary, u2_ary
+                'ij,kl,kl->ijkl', 1./(R(y_ary, x_ary)*np.sqrt(one_minus_R_sq)), sp_ary[:,None] + sm_ary[None,:], sp_ary[:,None] - sm_ary[None,:]
             ) / np.pi
 
             term_2a_exp = np.einsum(
@@ -357,28 +404,61 @@ class Fluctuations:
             )
 
             term_2b_exp = np.einsum(
-                'ij,k,l->ijkl', 2 * R(y_ary, x_ary) / (2 * one_minus_R_sq),
-                u1_ary, u2_ary
+                'ij,kl,kl->ijkl', 2 * R(y_ary, x_ary) / (2 * one_minus_R_sq),
+                sp_ary[:,None] + sm_ary[None,:], sp_ary[:,None] - sm_ary[None,:]
             )
+
+            # Remove all entries that have unphysical u1 or u2. 
+
+            pos_u1_mask = np.ones_like(term_1) * (
+                (sp_ary[:,None] + sm_ary[None,:])[None,None,:,:]
+            )
+
+            pos_u1_mask[pos_u1_mask >= 0] = 1
+            pos_u1_mask[pos_u1_mask < 0] = 0 
+
+            pos_u2_mask = np.ones_like(term_1) * (
+                (sp_ary[:,None] - sm_ary[None,:])[None,None,:,:]
+            )
+
+
+            pos_u2_mask[pos_u2_mask >= 0] = 1
+            pos_u2_mask[pos_u2_mask < 0] = 0
+            
+            pos_vel_mask = pos_u1_mask * pos_u2_mask 
+
+            term_1 = term_1 * pos_vel_mask
+            term_2a_exp = term_2a_exp * pos_vel_mask 
+            term_2b_exp = term_2b_exp * pos_vel_mask
 
             term_2 = 0.5*np.exp(term_2a_exp + term_2b_exp)
 
             term_3 = 1. - np.exp(-2*term_2b_exp)
 
             dW_zero_R = np.einsum(
-                'ij,kl,k,l->ijkl',
+                'ij,kl,kl,kl->ijkl',
                 np.ones_like(one_minus_R_sq),
-                np.exp(-u1_sq_plus_u2_sq/2) / np.pi, u1_ary**2, u2_ary**2
+                np.exp(-u1_sq_plus_u2_sq/2) / np.pi, 
+                (sp_ary[:,None] + sm_ary[None,:])**2, 
+                (sp_ary[:,None] - sm_ary[None,:])**2
             )
 
+ 
             large_R_term = term_1 * term_2 * term_3 - dW_zero_R 
+            large_R_term = large_R_term * pos_vel_mask
+
 
             small_R_term = np.einsum(
-                'ij,kl,k,l->ijkl',
+                'ij,kl,kl,kl->ijkl',
                 R(y_ary, x_ary)**2, 
                 np.exp(-u1_sq_plus_u2_sq / 2) / 6. / np.pi, 
-                u1_ary**2 * (u1_ary**2 - 3.), u2_ary**2 * (u2_ary**2 - 3),
+                (sp_ary[:,None] + sm_ary[None,:])**2 
+                * ((sp_ary[:,None] + sm_ary[None,:])**2 - 3.), 
+                (sp_ary[:,None] - sm_ary[None,:])**2 
+                * ((sp_ary[:,None] - sm_ary[None,:])**2 - 3.),
             )
+
+            small_R_term = small_R_term * pos_vel_mask
 
             mask = np.zeros_like(large_R_term) + R(y_ary, x_ary)[:,:,None,None]
             
@@ -390,26 +470,178 @@ class Fluctuations:
             
             return large_R_term*large_R_mask + small_R_term*small_R_mask
 
-        def dff(
-            y_ary=y_ary, x_ary=x_ary, u1_ary=u_ary, u2_ary=u_ary
-        ): 
+        def int_y_dff(
+            y_ary=y_ary, x_ary=x_ary, sp_ary=sp_ary, sm_ary=sm_ary
+        ):
 
-            return np.einsum(
-                'ijkl,k,l->ijkl',
-                dW(y_ary, x_ary, u1_ary, u2_ary), 
-                self.f_v(u1_ary * self.v_fluc.sigma1D),
-                self.f_v(u2_ary * self.v_fluc.sigma1D)
+            if np.array_equal(x_ary, self.x_numerical_ary): 
+
+                if self.integ_dW_cached is None: 
+
+                    self.integ_dW_cached = np.trapz(
+                        dW(y_ary, x_ary, sp_ary, sm_ary), y_ary, axis=0
+                    )
+
+                integ_dW = self.integ_dW_cached 
+            
+            else: 
+
+                integ_dW = np.trapz(
+                    dW(y_ary, x_ary, sp_ary, sm_ary), y_ary, axis=0
+                )
+
+            f_u1 = np.array([[
+                self.f_v((sp + sm) * self.v_fluc.sigma1D) for sm in sm_ary
+                ] for sp in sp_ary
+            ])
+
+            f_u2 = np.array([[
+                self.f_v((sp - sm) * self.v_fluc.sigma1D) for sm in sm_ary
+                ] for sp in sp_ary
+            ])
+
+            return integ_dW, np.einsum(
+                'ijk,jk...,jk...->ijk...', integ_dW, 
+                f_u1, f_u2
             )
 
-        return np.trapz(
+        # res = 2 * np.trapz(
+        #     np.trapz(
+        #         int_y_dff(y_ary, x_ary, sp_ary, sm_ary), sp_ary, axis=1
+        #     ), sm_ary, axis=1
+        # )
+
+        # return res
+
+        res = 2 * np.trapz(
             np.trapz(
-                np.trapz(
-                    dff(y_ary, x_ary, u_ary, u_ary), y_ary, axis=0
-                ),
-                u_ary, axis=-2
-            ), 
-            u_ary, axis=-1
+                int_y_dff(y_ary, x_ary, sp_ary, sm_ary)[1], sp_ary, axis=1
+            ), sm_ary, axis=1
         )
+
+        return int_y_dff(y_ary, x_ary, sp_ary, sm_ary), res
+
+
+        # def dW(
+        #     y_ary=y_ary, x_ary=x_ary, u1_ary=u_ary, u2_ary=u_ary
+        # ): 
+
+        #     one_minus_R_sq = 1. - R(y_ary, x_ary)**2 
+        #     u1_sq_plus_u2_sq = u1_ary[:,None]**2 + u2_ary[None,:]**2 
+
+        #     term_1 = np.einsum(
+        #         'ij,k,l->ijkl', 1./(R(y_ary, x_ary)*np.sqrt(one_minus_R_sq)), u1_ary, u2_ary
+        #     ) / np.pi
+
+        #     term_2a_exp = np.einsum(
+        #         'ij,kl->ijkl', 1. / (2 * one_minus_R_sq), -u1_sq_plus_u2_sq
+        #     )
+
+        #     term_2b_exp = np.einsum(
+        #         'ij,k,l->ijkl', 2 * R(y_ary, x_ary) / (2 * one_minus_R_sq),
+        #         u1_ary, u2_ary
+        #     )
+
+        #     term_2 = 0.5*np.exp(term_2a_exp + term_2b_exp)
+
+        #     term_3 = 1. - np.exp(-2*term_2b_exp)
+
+        #     dW_zero_R = np.einsum(
+        #         'ij,kl,k,l->ijkl',
+        #         np.ones_like(one_minus_R_sq),
+        #         np.exp(-u1_sq_plus_u2_sq/2) / np.pi, u1_ary**2, u2_ary**2
+        #     )
+
+            
+
+        #     large_R_term = term_1 * term_2 * term_3 - dW_zero_R 
+
+        #     small_R_term = np.einsum(
+        #         'ij,kl,k,l->ijkl',
+        #         R(y_ary, x_ary)**2, 
+        #         np.exp(-u1_sq_plus_u2_sq / 2) / 6. / np.pi, 
+        #         u1_ary**2 * (u1_ary**2 - 3.), u2_ary**2 * (u2_ary**2 - 3),
+        #     )
+
+        #     # test = term_1 * term_2 * term_3
+
+        #     # print(np.min(test), np.max(test))
+
+        #     # print(np.min(large_R_term), np.max(large_R_term))
+
+        #     mask = np.zeros_like(large_R_term) + R(y_ary, x_ary)[:,:,None,None]
+            
+        #     large_R_mask = np.ones_like(mask)
+        #     small_R_mask = np.ones_like(mask)
+            
+        #     large_R_mask[mask < 0.1] *= 0
+        #     small_R_mask[mask >= 0.1] *= 0
+            
+        #     return large_R_term*large_R_mask + small_R_term*small_R_mask
+
+        # def dff(
+        #     y_ary=y_ary, x_ary=x_ary, u1_ary=u_ary, u2_ary=u_ary
+        # ):
+
+        #     return np.einsum(
+        #         'ijkl,k...,l...->ijkl...',
+        #         dW(y_ary, x_ary, u1_ary, u2_ary), 
+        #         self.f_v(u1_ary * self.v_fluc.sigma1D),
+        #         self.f_v(u2_ary * self.v_fluc.sigma1D)
+        #     )
+
+        # def int_y_dff(
+        #     y_ary=y_ary, x_ary=x_ary, u1_ary=u_ary, u2_ary=u_ary
+        # ):
+
+        #     if np.array_equal(x_ary, self.x_numerical_ary): 
+
+        #         if self.integ_dW_cached is None: 
+
+        #             self.integ_dW_cached = np.trapz(
+        #                 dW(y_ary, x_ary, u1_ary, u2_ary), y_ary, axis=0
+        #             )
+
+        #         integ_dW = self.integ_dW_cached 
+            
+        #     else: 
+
+        #         integ_dW = np.trapz(
+        #             dW(y_ary, x_ary, u1_ary, u2_ary), y_ary, axis=0
+        #         )
+
+        #     return integ_dW, np.einsum(
+        #         'ijk,j...,k...->ijk...', integ_dW, 
+        #         self.f_v(u1_ary * self.v_fluc.sigma1D),
+        #         self.f_v(u2_ary * self.v_fluc.sigma1D)
+        #     )
+
+        # # return np.trapz(
+        # #     np.trapz(
+        # #         np.trapz(
+        # #             dff(y_ary, x_ary, u_ary, u_ary), y_ary, axis=0
+        # #         ),
+        # #         u_ary, axis=2
+        # #     ), 
+        # #     u_ary, axis=3
+        # # )
+
+        # # res = np.trapz(
+        # #     np.trapz(
+        # #         int_y_dff(y_ary, x_ary, u_ary, u_ary), u_ary, axis=1
+        # #     ), u_ary, axis=1
+        # # )
+
+        # res = np.trapz(
+        #     np.trapz(
+        #         int_y_dff(y_ary, x_ary, u_ary, u_ary)[1], u_ary, axis=1
+        #     ), u_ary, axis=1
+        # )
+
+        # return int_y_dff(y_ary, x_ary, u_ary, u_ary), res
+        
+
+        # return res
 
     def xi_f_large_dist(self, x_ary): 
         """Numerical calculation of the correlation function at large distances. 
@@ -425,9 +657,11 @@ class Fluctuations:
         -------
         """ 
 
-        return (self.v_fluc.xi_v2(x_ary) / self.v_fluc.sigma3D**4 
-            * self.b**2 * self.mean**2 
-        )
+        return np.squeeze(np.einsum(
+            'i,j... -> ij...',
+            self.v_fluc.xi_v2(x_ary) / self.v_fluc.sigma3D**4, 
+            np.atleast_1d(self.b**2 * self.mean**2)
+        ))
 
     def xi_f_short_dist(self, x_ary): 
         """Numerical calculation of the correlation function at small distances. 
@@ -448,12 +682,13 @@ class Fluctuations:
             self.v_fluc.cparint(x_ary)**2 + 2 * self.v_fluc.cperpint(x_ary)**2
         )
 
-        return self.var - (
-            1. / 6. * tr_one_minus_c2
-            * self.mean_df_dv_sq * self.v_fluc.sigma1D**2 
-        )
+        return self.var - np.squeeze(np.einsum(
+            'i,j... -> ij...',
+            1. / 6. * tr_one_minus_c2, 
+            np.atleast_1d(self.mean_df_dv_sq) * self.v_fluc.sigma1D**2 
+        ))
 
-    def xi_f(self, x_ary=None, short_thres=1., large_thres=300., interp=True): 
+    def xi_f(self, x_ary=None, short_thres=0.5, large_thres=300., interp=True): 
         """Correlation function. 
 
         xi_f has units of f^2. Combines the short, numerical and long distance 
@@ -478,17 +713,9 @@ class Fluctuations:
         # Initializes on first call. 
         if self.xi_f_int is None: 
 
-            x_short_ary = np.arange(0, 30, 0.1)
-            x_numerical_ary = np.logspace(-1, np.log10(301.), num=200)
-            x_large_ary = np.concatenate((
-                np.logspace(1, 2, num=100)[:-1],
-                np.logspace(2, np.log10(350.), num=10000),
-                np.logspace(np.log10(350.), 3, num=100)[1:]
-            ))
-
-            xi_f_short_ary       = self.xi_f_short_dist(x_short_ary)
-            xi_f_numerical_ary   = self.xi_f_numerical(x_numerical_ary) 
-            xi_f_large_ary       = self.xi_f_large_dist(x_large_ary) 
+            xi_f_short_ary       = self.xi_f_short_dist(self.x_short_ary)
+            xi_f_numerical_ary   = self.xi_f_numerical(self.x_numerical_ary) 
+            xi_f_large_ary       = self.xi_f_large_dist(self.x_large_ary) 
 
             # xi_f_short_inter_ary = self.xi_f_short_dist(x_numerical_ary)
             # xi_f_large_inter_ary = self.xi_f_large_dist(x_numerical_ary) 
@@ -507,13 +734,17 @@ class Fluctuations:
             # )
 
 
-            xi_f_small_int = interp1d(x_short_ary, xi_f_short_ary, kind=9)
-
-            xi_f_numerical_int = interp1d(
-                x_numerical_ary, xi_f_numerical_ary, kind=9
+            xi_f_small_int = interp1d(
+                self.x_short_ary, xi_f_short_ary, axis=0, kind=9
             )
 
-            xi_f_large_int = interp1d(x_large_ary, xi_f_large_ary, kind=9)
+            xi_f_numerical_int = interp1d(
+                self.x_numerical_ary, xi_f_numerical_ary, axis=0, kind=9
+            )
+
+            xi_f_large_int = interp1d(
+                self.x_large_ary, xi_f_large_ary, axis=0, kind=9
+            )
 
             def interp_func(xx_ary):
 
@@ -525,9 +756,13 @@ class Fluctuations:
                 large     = xi_f_large_int(
                     xx_ary[(xx_ary > large_thres) & (xx_ary <= 1e3)]
                 ) 
-                exceed    = np.zeros_like(xx_ary[xx_ary > 1e3])
 
-                return np.concatenate((small, numerical, large, exceed))
+                dim_exceed = np.concatenate(
+                    (xx_ary[xx_ary > 1e3].shape, small[0,:].shape)
+                )
+                exceed    = np.zeros(dim_exceed)
+
+                return np.concatenate((small, numerical, large, exceed), axis=0)
 
             self.xi_f_int = interp_func  
 
