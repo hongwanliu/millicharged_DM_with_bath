@@ -859,11 +859,11 @@ class Fluctuations:
         -------
         """ 
 
-        return np.squeeze(np.einsum(
+        return np.einsum(
             'i,j... -> ij...',
             self.v_fluc.xi_v2(x_ary) / self.v_fluc.sigma3D**4, 
             np.atleast_1d(self.b**2)
-        ))
+        )
 
     def xi_f_short_dist(self, x_ary): 
         """Numerical calculation of the correlation function at small distances. 
@@ -884,11 +884,11 @@ class Fluctuations:
             self.v_fluc.cparint(x_ary)**2 + 2 * self.v_fluc.cperpint(x_ary)**2
         )
 
-        return self.var - np.squeeze(np.einsum(
+        return self.var - np.einsum(
             'i,j... -> ij...',
             1. / 6. * tr_one_minus_c2, 
             np.atleast_1d(self.mean_df_dv_sq) * self.v_fluc.sigma1D**2 
-        ))
+        )
 
     def xi_f(self, x_ary=None, short_thres=0.001, large_thres=300., interp=True, fine_mesh=True): 
         """Correlation function. 
@@ -937,15 +937,15 @@ class Fluctuations:
 
 
             xi_f_small_int = interp1d(
-                self.x_short_ary, xi_f_short_ary, axis=0, kind=1
+                self.x_short_ary, xi_f_short_ary, axis=0, kind=5
             )
 
             xi_f_numerical_int = interp1d(
-                self.x_numerical_ary, xi_f_numerical_ary, axis=0, kind=1
+                self.x_numerical_ary, xi_f_numerical_ary, axis=0, kind=5
             )
 
             xi_f_large_int = interp1d(
-                self.x_large_ary, xi_f_large_ary, axis=0, kind=1
+                self.x_large_ary, xi_f_large_ary, axis=0, kind=5
             )
 
             def interp_func(xx_ary):

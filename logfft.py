@@ -64,11 +64,24 @@ def fftj0(f, logrmin, logrmax, n_pts=4096, q=0):
     # Actual k-binning
     k_ary = 10**(logkc + (np.arange(1, n_pts+1) - nc)*dlogr)
 
-    # function to log-Fourier transform
-    ar_ary = f(r_ary) * (r_ary)**(1.5 - q)
+    # function to log-Fourier transform. 
+    # In general f returns something multidimensional. 
+    # ar_ary has dimensions ... x r_ary. 
+    ar_ary = np.moveaxis(f(r_ary), 0, -1) * (r_ary)**(1.5 - q)
 
-    # log-Fourier transform result
-    ak_ary = (2*np.pi)**1.5 * k_ary**(-1.5-q) * pyfftlog.fht(ar_ary.copy(), xsave, tdir)
+    ak_ary = np.zeros(ar_ary.shape) 
+
+    indices_ary = np.moveaxis(np.indices(ak_ary[...,0].shape), 0, -1)
+
+    for ind in indices_ary.reshape(-1, indices_ary.shape[-1]): 
+
+        if ind.shape == ():
+
+            ak_ary[ind] = (2*np.pi)**1.5 * k_ary**(-1.5-q) * pyfftlog.fht(ar_ary[ind].copy(), xsave, tdir)
+
+        else:
+
+            ak_ary[tuple(ind)] = (2*np.pi)**1.5 * k_ary**(-1.5-q) * pyfftlog.fht(ar_ary[tuple(ind)].copy(), xsave, tdir)
 
     return (k_ary, ak_ary)
 
