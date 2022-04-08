@@ -381,18 +381,6 @@ class Fluctuations:
         u_ary = self.v_ary / self.v_fluc.sigma1D
         u_ary = np.linspace(u_ary[0], u_ary[-1], 70)
 
-        # Do everything in terms of sp = (u1 + u2) / 2, sm = (u1 - u2) / 2. 
-        # sp_ary = np.array(u_ary)
-        # sm_sub_ary = np.concatenate((
-        #     np.linspace(-u_ary[-1]/2, -0.3, 22),
-        #     np.flipud(-np.logspace(-4, np.log10(0.3), 16)[:-1]),
-        #     [0],
-        #     np.logspace(-4, np.log10(0.3), 16)[:-1], 
-        #     np.linspace(0.3, u_ary[-1]/2, 22)
-        # ))
-        # all_pts_ary = np.union1d(sp_ary, sm_sub_ary)
-        # sm_ary = all_pts_ary[all_pts_ary <= u_ary[-1]/2]
-
         # Symmetric about y = 0: just multiply by two later. 
         y_ary = np.linspace(0, 1, 25)
 
@@ -404,140 +392,6 @@ class Fluctuations:
             )
             return np.sqrt(term_1 + term_2) 
 
-        # def dW(
-        #     y_ary=y_ary, x_ary=x_ary, sp_ary=sp_ary, sm_ary=sm_ary
-        # ): 
-
-        #     one_minus_R_sq = 1. - R(y_ary, x_ary)**2 
-
-        #     u1_sq_plus_u2_sq = 2*sp_ary[:,None]**2 + 2*sm_ary[None,:]**2 
-
-        #     term_1 = np.einsum(
-        #         'ij,kl,kl->ijkl', 1./(R(y_ary, x_ary)*np.sqrt(one_minus_R_sq)), sp_ary[:,None] + sm_ary[None,:], sp_ary[:,None] - sm_ary[None,:]
-        #     ) / np.pi
-
-        #     term_2a_exp = np.einsum(
-        #         'ij,kl->ijkl', 1. / (2 * one_minus_R_sq), -u1_sq_plus_u2_sq
-        #     )
-
-        #     term_2b_exp = np.einsum(
-        #         'ij,kl,kl->ijkl', 2 * R(y_ary, x_ary) / (2 * one_minus_R_sq),
-        #         sp_ary[:,None] + sm_ary[None,:], sp_ary[:,None] - sm_ary[None,:]
-        #     )
-
-        #     # Remove all entries that have unphysical u1 or u2. 
-
-        #     pos_u1_mask = np.ones_like(term_1) * (
-        #         (sp_ary[:,None] + sm_ary[None,:])[None,None,:,:]
-        #     )
-
-        #     pos_u1_mask[pos_u1_mask >= 0] = 1
-        #     pos_u1_mask[pos_u1_mask < 0] = 0 
-
-        #     pos_u2_mask = np.ones_like(term_1) * (
-        #         (sp_ary[:,None] - sm_ary[None,:])[None,None,:,:]
-        #     )
-
-
-        #     pos_u2_mask[pos_u2_mask >= 0] = 1
-        #     pos_u2_mask[pos_u2_mask < 0] = 0
-            
-        #     pos_vel_mask = pos_u1_mask * pos_u2_mask 
-
-        #     term_1 = term_1 * pos_vel_mask
-        #     term_2a_exp = term_2a_exp * pos_vel_mask 
-        #     term_2b_exp = term_2b_exp * pos_vel_mask
-
-        #     term_2 = 0.5*np.exp(term_2a_exp + term_2b_exp)
-
-        #     term_3 = 1. - np.exp(-2*term_2b_exp)
-
-        #     dW_zero_R = np.einsum(
-        #         'ij,kl,kl,kl->ijkl',
-        #         np.ones_like(one_minus_R_sq),
-        #         np.exp(-u1_sq_plus_u2_sq/2) / np.pi, 
-        #         (sp_ary[:,None] + sm_ary[None,:])**2, 
-        #         (sp_ary[:,None] - sm_ary[None,:])**2
-        #     )
-
- 
-        #     large_R_term = term_1 * term_2 * term_3 - dW_zero_R 
-        #     large_R_term = large_R_term * pos_vel_mask
-
-
-        #     small_R_term = np.einsum(
-        #         'ij,kl,kl,kl->ijkl',
-        #         R(y_ary, x_ary)**2, 
-        #         np.exp(-u1_sq_plus_u2_sq / 2) / 6. / np.pi, 
-        #         (sp_ary[:,None] + sm_ary[None,:])**2 
-        #         * ((sp_ary[:,None] + sm_ary[None,:])**2 - 3.), 
-        #         (sp_ary[:,None] - sm_ary[None,:])**2 
-        #         * ((sp_ary[:,None] - sm_ary[None,:])**2 - 3.),
-        #     )
-
-        #     small_R_term = small_R_term * pos_vel_mask
-
-        #     mask = np.zeros_like(large_R_term) + R(y_ary, x_ary)[:,:,None,None]
-            
-        #     large_R_mask = np.ones_like(mask)
-        #     small_R_mask = np.ones_like(mask)
-            
-        #     large_R_mask[mask < 0.1] *= 0
-        #     small_R_mask[mask >= 0.1] *= 0
-            
-        #     return large_R_term*large_R_mask + small_R_term*small_R_mask
-
-        # def int_y_dff(
-        #     y_ary=y_ary, x_ary=x_ary, sp_ary=sp_ary, sm_ary=sm_ary
-        # ):
-
-        #     if np.array_equal(x_ary, self.x_numerical_ary): 
-
-        #         if self.integ_dW_cached is None: 
-
-        #             self.integ_dW_cached = np.trapz(
-        #                 dW(y_ary, x_ary, sp_ary, sm_ary), y_ary, axis=0
-        #             )
-
-        #         integ_dW = self.integ_dW_cached 
-            
-        #     else: 
-
-        #         integ_dW = np.trapz(
-        #             dW(y_ary, x_ary, sp_ary, sm_ary), y_ary, axis=0
-        #         )
-
-        #     f_u1 = np.array([[
-        #         self.f_v((sp + sm) * self.v_fluc.sigma1D) for sm in sm_ary
-        #         ] for sp in sp_ary
-        #     ])
-
-        #     f_u2 = np.array([[
-        #         self.f_v((sp - sm) * self.v_fluc.sigma1D) for sm in sm_ary
-        #         ] for sp in sp_ary
-        #     ])
-
-        #     return integ_dW, np.einsum(
-        #         'ijk,jk...,jk...->ijk...', integ_dW, 
-        #         f_u1, f_u2
-        #     )
-
-        # # res = 2 * np.trapz(
-        # #     np.trapz(
-        # #         int_y_dff(y_ary, x_ary, sp_ary, sm_ary), sp_ary, axis=1
-        # #     ), sm_ary, axis=1
-        # # )
-
-        # # return res
-
-        # res = 2 * np.trapz(
-        #     np.trapz(
-        #         int_y_dff(y_ary, x_ary, sp_ary, sm_ary)[1], sp_ary, axis=1
-        #     ), sm_ary, axis=1
-        # )
-
-        # return int_y_dff(y_ary, x_ary, sp_ary, sm_ary), res
-
         def get_mesh(u_ary=u_ary): 
 
             mesh = []
@@ -546,44 +400,6 @@ class Fluctuations:
 
                 low_bound = 0
                 upp_bound = u_ary[-1] 
-
-                # if i > 0: 
-
-                #     low_bound = (u_ary[i-1] + u) / 2. 
-
-                # if i < len(u_ary) - 1:
-
-                #     upp_bound = (u + u_ary[i+1]) / 2.
-
-                # bin_length = upp_bound - low_bound 
-                
-                # if i > 0 and i < len(u_ary) - 1: 
-
-                #     bins = u + np.concatenate((
-                #             - np.flipud(np.logspace(-3, 0, 27)) * bin_length / 2,
-                #             [0],
-                #             np.logspace(-3, 0, 27) * bin_length / 2
-                #     ))
-
-                #     new_ary = np.concatenate((u_ary[:i], bins, u_ary[i+1:]))
-
-                # elif i == 0: 
-
-                #     bins = u + np.concatenate((
-                #             [0],
-                #             np.logspace(-3, 0, 54) * bin_length
-                #     ))
-
-                #     new_ary = np.concatenate((bins, u_ary[1:]))
-
-                # elif i == len(u_ary) - 1: 
-
-                #     bins = u + np.concatenate((
-                #             - np.flipud(np.logspace(-3, 0, 54)) * bin_length,
-                #             [0]
-                #     ))
-
-                #     new_ary = np.concatenate((u_ary[:-1], bins))
 
                 if i > 0: 
 
@@ -679,14 +495,7 @@ class Fluctuations:
                     1./(R(y_ary, x_ary)*np.sqrt(one_minus_R_sq)), u1_ary, u2_ary
                 ) / np.pi
 
-                # term_2a_exp = np.einsum(
-                #     'ij,kl->ijkl', 1. / (2 * one_minus_R_sq), -u1_sq_plus_u2_sq
-                # )
 
-                # term_2b_exp = np.einsum(
-                #     'ij,k,l->ijkl', 2 * R(y_ary, x_ary) / (2 * one_minus_R_sq),
-                #     u1_ary, u2_ary
-                # )
                 u1_minus_u2 = u1_ary[:,None] - u2_ary[None,:]
 
                 term_2a_exp = np.einsum(
@@ -710,13 +519,6 @@ class Fluctuations:
             term_2 = 0.5*np.exp(term_2a_exp + term_2b_exp)
 
             term_3 = 1. - np.exp(-2*term_2b_exp)
-
-            # print(one_minus_R_sq[1,0])
-            # print(term_2b_exp[1,0,:,1])
-
-            # print(term_2a_exp[0,0,:,-3], term_2b_exp[0,0,:,-3])
-            # test = term_1 * term_2 * term_3
-            # print(test[0,0,:,-3], dW_zero_R[0,0,:,-3])
 
             large_R_term = term_1 * term_2 * term_3 - 0*dW_zero_R 
 
@@ -802,21 +604,6 @@ class Fluctuations:
                     self.f_v(u2_ary * self.v_fluc.sigma1D)
                 )
 
-        # return np.trapz(
-        #     np.trapz(
-        #         np.trapz(
-        #             dff(y_ary, x_ary, u_ary, u_ary), y_ary, axis=0
-        #         ),
-        #         u_ary, axis=2
-        #     ), 
-        #     u_ary, axis=3
-        # )
-
-        # res = np.trapz(
-        #     np.trapz(
-        #         int_y_dff(y_ary, x_ary, u_ary, u_ary), u_ary, axis=1
-        #     ), u_ary, axis=1
-        # )
 
         integrand = int_y_dff(y_ary, x_ary, u_ary, u_ary, fine_mesh=fine_mesh)
 
@@ -919,22 +706,6 @@ class Fluctuations:
             xi_f_numerical_ary   = self.xi_f_numerical(self.x_numerical_ary, fine_mesh=fine_mesh) 
             xi_f_large_ary       = self.xi_f_large_dist(self.x_large_ary) 
 
-            # xi_f_short_inter_ary = self.xi_f_short_dist(x_numerical_ary)
-            # xi_f_large_inter_ary = self.xi_f_large_dist(x_numerical_ary) 
-            # inter_length = 200. - 1. 
-
-            # xi_f_computed_ary = smooth(
-            #     x_numerical_ary, xi_f_short_inter_ary, 
-            #     xi_f_numerical_ary, 
-            #     1., 3.
-            # )
-
-            # xi_f_computed_ary = smooth(
-            #     x_numerical_ary, xi_f_numerical_ary, 
-            #     xi_f_large_inter_ary, 
-            #     1. + inter_length*0.15, 1. + inter_length*0.95
-            # )
-
 
             xi_f_small_int = interp1d(
                 self.x_short_ary, xi_f_short_ary, axis=0, kind=5
@@ -984,20 +755,6 @@ class Fluctuations:
 
             xi_f_computed_ary = self.xi_f_numerical(inter_x_ary, fine_mesh=fine_mesh)
 
-            # inter_length = large_thres - short_thres
-
-            # xi_f_short_inter_ary = self.xi_f_short_dist(inter_x_ary) 
-            # xi_f_large_inter_ary = self.xi_f_large_dist(inter_x_ary) 
-
-            # xi_f_computed_ary = smooth(
-            #     inter_x_ary, xi_f_short_inter_ary, xi_f_computed_ary, 
-            #     short_thres + 0.05, 3.
-            # )
-
-            # xi_f_computed_ary = smooth(
-            #     inter_x_ary, xi_f_computed_ary, xi_f_large_inter_ary, 
-            #     short_thres + inter_length*0.75, short_thres + inter_length*0.95
-            # )
 
             xi_f_large_ary    = self.xi_f_large_dist(
                 x_ary[(x_ary > large_thres) & (x_ary <= 1e3)]
