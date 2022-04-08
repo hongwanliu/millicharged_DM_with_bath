@@ -241,9 +241,9 @@ class Velocity_Fluctuations:
     def bias_f(self, f, v): 
         """Bias parameter. 
         
-        This parameter relates the v^2 (dimensionless) correlation function to the (dimensionless) correlation function of f(v^2) at long distances. It is given by (3/2) * (1 - <v^2 f> / (<f> vrms^2)), where vrms^2 = <v^2> - <v>^2. 
+        This parameter relates the v^2 (dimensionless) correlation function to the (dimensionful) correlation function of f(v^2) at long distances. It is given by (3/2) * (<f> - <v^2 f> / (vrms^2)), where vrms^2 = <v^2> - <v>^2. 
 
-        The result is dimensionless. 
+        The result has dimensions f. 
 
         Parameters
         ----------
@@ -264,10 +264,10 @@ class Velocity_Fluctuations:
             print(Vrms_sq)
             warnings.warn('Computed Vrms_sq is not self.sigma3D.')
 
-        return 3 / 2 * (1. - (
+        return 3 / 2 * (self.mean_f(f, v) - (
             4. * np.pi * np.trapz(
                 self.MB(v) * v**4 * np.moveaxis(f(v), 0, -1), v
-            ) / Vrms_sq / self.mean_f(f, v)
+            ) / Vrms_sq 
         ))
 
 
@@ -320,7 +320,10 @@ class Fluctuations:
 
         # Default binning for constructing correlation function interpolation. 
         self.x_short_ary = np.arange(0, 30, 0.1)
-        self.x_numerical_ary = np.logspace(-1, np.log10(301.), num=200)
+        self.x_numerical_ary = np.concatenate((
+            np.logspace(-4, -2, num=10)[:-1],
+            np.logspace(-2, np.log10(301.), num=200)
+        ))
         self.x_large_ary = np.concatenate((
             np.logspace(1, 2, num=100)[:-1],
             np.logspace(2, np.log10(350.), num=10000),
@@ -329,11 +332,23 @@ class Fluctuations:
 
         self.v_fluc = Velocity_Fluctuations(sigma3D=sigma3D)
 
-        self.f_v    = interp1d(v_ary, f_ary, axis=0, kind=2, bounds_error=False, fill_value=0.)
+        self.f_in_v    = interp1d(v_ary, f_ary, axis=0, kind=2, bounds_error=False, fill_value=0.)
 
-        self.mean   = self.v_fluc.mean_f(self.f_v, v_ary) 
+        self.mean   = self.v_fluc.mean_f(self.f_in_v, v_ary) 
+        
+
+        # Subtract out the mean. 
+        self.f_minus_mean_ary = f_ary - self.mean 
+
+        self.f_v = interp1d(
+            v_ary, self.f_minus_mean_ary, axis=0, kind=2, 
+            bounds_error=False, fill_value=0.
+        )
+
+        self.mean   = 0. 
         self.var    = self.v_fluc.var_f(self.f_v, v_ary) 
         self.b      = self.v_fluc.bias_f(self.f_v, v_ary)
+
 
         self.mean_df_dv_sq = self.v_fluc.mean_f(
             interp1d(v_ary[1:], np.moveaxis(
@@ -347,7 +362,7 @@ class Fluctuations:
         # Will be initialized with first call of self.xi_f
         self.xi_f_int = None
 
-    def xi_f_numerical(self, x_ary): 
+    def xi_f_numerical(self, x_ary, fine_mesh=True): 
         """Numerical calculation of the correlation function. 
 
         xi_f has units of f^2. 
@@ -366,16 +381,16 @@ class Fluctuations:
         u_ary = np.linspace(u_ary[0], u_ary[-1], 70)
 
         # Do everything in terms of sp = (u1 + u2) / 2, sm = (u1 - u2) / 2. 
-        sp_ary = np.array(u_ary)
-        sm_sub_ary = np.concatenate((
-            np.linspace(-u_ary[-1]/2, -0.3, 22),
-            np.flipud(-np.logspace(-4, np.log10(0.3), 16)[:-1]),
-            [0],
-            np.logspace(-4, np.log10(0.3), 16)[:-1], 
-            np.linspace(0.3, u_ary[-1]/2, 22)
-        ))
-        all_pts_ary = np.union1d(sp_ary, sm_sub_ary)
-        sm_ary = all_pts_ary[all_pts_ary <= u_ary[-1]/2]
+        # sp_ary = np.array(u_ary)
+        # sm_sub_ary = np.concatenate((
+        #     np.linspace(-u_ary[-1]/2, -0.3, 22),
+        #     np.flipud(-np.logspace(-4, np.log10(0.3), 16)[:-1]),
+        #     [0],
+        #     np.logspace(-4, np.log10(0.3), 16)[:-1], 
+        #     np.linspace(0.3, u_ary[-1]/2, 22)
+        # ))
+        # all_pts_ary = np.union1d(sp_ary, sm_sub_ary)
+        # sm_ary = all_pts_ary[all_pts_ary <= u_ary[-1]/2]
 
         y_ary = np.linspace(-1, 1, 50)
 
@@ -387,150 +402,16 @@ class Fluctuations:
             )
             return np.sqrt(term_1 + term_2) 
 
-        def dW(
-            y_ary=y_ary, x_ary=x_ary, sp_ary=sp_ary, sm_ary=sm_ary
-        ): 
-
-            one_minus_R_sq = 1. - R(y_ary, x_ary)**2 
-
-            u1_sq_plus_u2_sq = 2*sp_ary[:,None]**2 + 2*sm_ary[None,:]**2 
-
-            term_1 = np.einsum(
-                'ij,kl,kl->ijkl', 1./(R(y_ary, x_ary)*np.sqrt(one_minus_R_sq)), sp_ary[:,None] + sm_ary[None,:], sp_ary[:,None] - sm_ary[None,:]
-            ) / np.pi
-
-            term_2a_exp = np.einsum(
-                'ij,kl->ijkl', 1. / (2 * one_minus_R_sq), -u1_sq_plus_u2_sq
-            )
-
-            term_2b_exp = np.einsum(
-                'ij,kl,kl->ijkl', 2 * R(y_ary, x_ary) / (2 * one_minus_R_sq),
-                sp_ary[:,None] + sm_ary[None,:], sp_ary[:,None] - sm_ary[None,:]
-            )
-
-            # Remove all entries that have unphysical u1 or u2. 
-
-            pos_u1_mask = np.ones_like(term_1) * (
-                (sp_ary[:,None] + sm_ary[None,:])[None,None,:,:]
-            )
-
-            pos_u1_mask[pos_u1_mask >= 0] = 1
-            pos_u1_mask[pos_u1_mask < 0] = 0 
-
-            pos_u2_mask = np.ones_like(term_1) * (
-                (sp_ary[:,None] - sm_ary[None,:])[None,None,:,:]
-            )
-
-
-            pos_u2_mask[pos_u2_mask >= 0] = 1
-            pos_u2_mask[pos_u2_mask < 0] = 0
-            
-            pos_vel_mask = pos_u1_mask * pos_u2_mask 
-
-            term_1 = term_1 * pos_vel_mask
-            term_2a_exp = term_2a_exp * pos_vel_mask 
-            term_2b_exp = term_2b_exp * pos_vel_mask
-
-            term_2 = 0.5*np.exp(term_2a_exp + term_2b_exp)
-
-            term_3 = 1. - np.exp(-2*term_2b_exp)
-
-            dW_zero_R = np.einsum(
-                'ij,kl,kl,kl->ijkl',
-                np.ones_like(one_minus_R_sq),
-                np.exp(-u1_sq_plus_u2_sq/2) / np.pi, 
-                (sp_ary[:,None] + sm_ary[None,:])**2, 
-                (sp_ary[:,None] - sm_ary[None,:])**2
-            )
-
- 
-            large_R_term = term_1 * term_2 * term_3 - dW_zero_R 
-            large_R_term = large_R_term * pos_vel_mask
-
-
-            small_R_term = np.einsum(
-                'ij,kl,kl,kl->ijkl',
-                R(y_ary, x_ary)**2, 
-                np.exp(-u1_sq_plus_u2_sq / 2) / 6. / np.pi, 
-                (sp_ary[:,None] + sm_ary[None,:])**2 
-                * ((sp_ary[:,None] + sm_ary[None,:])**2 - 3.), 
-                (sp_ary[:,None] - sm_ary[None,:])**2 
-                * ((sp_ary[:,None] - sm_ary[None,:])**2 - 3.),
-            )
-
-            small_R_term = small_R_term * pos_vel_mask
-
-            mask = np.zeros_like(large_R_term) + R(y_ary, x_ary)[:,:,None,None]
-            
-            large_R_mask = np.ones_like(mask)
-            small_R_mask = np.ones_like(mask)
-            
-            large_R_mask[mask < 0.1] *= 0
-            small_R_mask[mask >= 0.1] *= 0
-            
-            return large_R_term*large_R_mask + small_R_term*small_R_mask
-
-        def int_y_dff(
-            y_ary=y_ary, x_ary=x_ary, sp_ary=sp_ary, sm_ary=sm_ary
-        ):
-
-            if np.array_equal(x_ary, self.x_numerical_ary): 
-
-                if self.integ_dW_cached is None: 
-
-                    self.integ_dW_cached = np.trapz(
-                        dW(y_ary, x_ary, sp_ary, sm_ary), y_ary, axis=0
-                    )
-
-                integ_dW = self.integ_dW_cached 
-            
-            else: 
-
-                integ_dW = np.trapz(
-                    dW(y_ary, x_ary, sp_ary, sm_ary), y_ary, axis=0
-                )
-
-            f_u1 = np.array([[
-                self.f_v((sp + sm) * self.v_fluc.sigma1D) for sm in sm_ary
-                ] for sp in sp_ary
-            ])
-
-            f_u2 = np.array([[
-                self.f_v((sp - sm) * self.v_fluc.sigma1D) for sm in sm_ary
-                ] for sp in sp_ary
-            ])
-
-            return integ_dW, np.einsum(
-                'ijk,jk...,jk...->ijk...', integ_dW, 
-                f_u1, f_u2
-            )
-
-        # res = 2 * np.trapz(
-        #     np.trapz(
-        #         int_y_dff(y_ary, x_ary, sp_ary, sm_ary), sp_ary, axis=1
-        #     ), sm_ary, axis=1
-        # )
-
-        # return res
-
-        res = 2 * np.trapz(
-            np.trapz(
-                int_y_dff(y_ary, x_ary, sp_ary, sm_ary)[1], sp_ary, axis=1
-            ), sm_ary, axis=1
-        )
-
-        return int_y_dff(y_ary, x_ary, sp_ary, sm_ary), res
-
-
         # def dW(
-        #     y_ary=y_ary, x_ary=x_ary, u1_ary=u_ary, u2_ary=u_ary
+        #     y_ary=y_ary, x_ary=x_ary, sp_ary=sp_ary, sm_ary=sm_ary
         # ): 
 
         #     one_minus_R_sq = 1. - R(y_ary, x_ary)**2 
-        #     u1_sq_plus_u2_sq = u1_ary[:,None]**2 + u2_ary[None,:]**2 
+
+        #     u1_sq_plus_u2_sq = 2*sp_ary[:,None]**2 + 2*sm_ary[None,:]**2 
 
         #     term_1 = np.einsum(
-        #         'ij,k,l->ijkl', 1./(R(y_ary, x_ary)*np.sqrt(one_minus_R_sq)), u1_ary, u2_ary
+        #         'ij,kl,kl->ijkl', 1./(R(y_ary, x_ary)*np.sqrt(one_minus_R_sq)), sp_ary[:,None] + sm_ary[None,:], sp_ary[:,None] - sm_ary[None,:]
         #     ) / np.pi
 
         #     term_2a_exp = np.einsum(
@@ -538,36 +419,61 @@ class Fluctuations:
         #     )
 
         #     term_2b_exp = np.einsum(
-        #         'ij,k,l->ijkl', 2 * R(y_ary, x_ary) / (2 * one_minus_R_sq),
-        #         u1_ary, u2_ary
+        #         'ij,kl,kl->ijkl', 2 * R(y_ary, x_ary) / (2 * one_minus_R_sq),
+        #         sp_ary[:,None] + sm_ary[None,:], sp_ary[:,None] - sm_ary[None,:]
         #     )
+
+        #     # Remove all entries that have unphysical u1 or u2. 
+
+        #     pos_u1_mask = np.ones_like(term_1) * (
+        #         (sp_ary[:,None] + sm_ary[None,:])[None,None,:,:]
+        #     )
+
+        #     pos_u1_mask[pos_u1_mask >= 0] = 1
+        #     pos_u1_mask[pos_u1_mask < 0] = 0 
+
+        #     pos_u2_mask = np.ones_like(term_1) * (
+        #         (sp_ary[:,None] - sm_ary[None,:])[None,None,:,:]
+        #     )
+
+
+        #     pos_u2_mask[pos_u2_mask >= 0] = 1
+        #     pos_u2_mask[pos_u2_mask < 0] = 0
+            
+        #     pos_vel_mask = pos_u1_mask * pos_u2_mask 
+
+        #     term_1 = term_1 * pos_vel_mask
+        #     term_2a_exp = term_2a_exp * pos_vel_mask 
+        #     term_2b_exp = term_2b_exp * pos_vel_mask
 
         #     term_2 = 0.5*np.exp(term_2a_exp + term_2b_exp)
 
         #     term_3 = 1. - np.exp(-2*term_2b_exp)
 
         #     dW_zero_R = np.einsum(
-        #         'ij,kl,k,l->ijkl',
+        #         'ij,kl,kl,kl->ijkl',
         #         np.ones_like(one_minus_R_sq),
-        #         np.exp(-u1_sq_plus_u2_sq/2) / np.pi, u1_ary**2, u2_ary**2
+        #         np.exp(-u1_sq_plus_u2_sq/2) / np.pi, 
+        #         (sp_ary[:,None] + sm_ary[None,:])**2, 
+        #         (sp_ary[:,None] - sm_ary[None,:])**2
         #     )
 
-            
-
+ 
         #     large_R_term = term_1 * term_2 * term_3 - dW_zero_R 
+        #     large_R_term = large_R_term * pos_vel_mask
+
 
         #     small_R_term = np.einsum(
-        #         'ij,kl,k,l->ijkl',
+        #         'ij,kl,kl,kl->ijkl',
         #         R(y_ary, x_ary)**2, 
         #         np.exp(-u1_sq_plus_u2_sq / 2) / 6. / np.pi, 
-        #         u1_ary**2 * (u1_ary**2 - 3.), u2_ary**2 * (u2_ary**2 - 3),
+        #         (sp_ary[:,None] + sm_ary[None,:])**2 
+        #         * ((sp_ary[:,None] + sm_ary[None,:])**2 - 3.), 
+        #         (sp_ary[:,None] - sm_ary[None,:])**2 
+        #         * ((sp_ary[:,None] - sm_ary[None,:])**2 - 3.),
         #     )
 
-        #     # test = term_1 * term_2 * term_3
-
-        #     # print(np.min(test), np.max(test))
-
-        #     # print(np.min(large_R_term), np.max(large_R_term))
+        #     small_R_term = small_R_term * pos_vel_mask
 
         #     mask = np.zeros_like(large_R_term) + R(y_ary, x_ary)[:,:,None,None]
             
@@ -579,19 +485,8 @@ class Fluctuations:
             
         #     return large_R_term*large_R_mask + small_R_term*small_R_mask
 
-        # def dff(
-        #     y_ary=y_ary, x_ary=x_ary, u1_ary=u_ary, u2_ary=u_ary
-        # ):
-
-        #     return np.einsum(
-        #         'ijkl,k...,l...->ijkl...',
-        #         dW(y_ary, x_ary, u1_ary, u2_ary), 
-        #         self.f_v(u1_ary * self.v_fluc.sigma1D),
-        #         self.f_v(u2_ary * self.v_fluc.sigma1D)
-        #     )
-
         # def int_y_dff(
-        #     y_ary=y_ary, x_ary=x_ary, u1_ary=u_ary, u2_ary=u_ary
+        #     y_ary=y_ary, x_ary=x_ary, sp_ary=sp_ary, sm_ary=sm_ary
         # ):
 
         #     if np.array_equal(x_ary, self.x_numerical_ary): 
@@ -599,7 +494,7 @@ class Fluctuations:
         #         if self.integ_dW_cached is None: 
 
         #             self.integ_dW_cached = np.trapz(
-        #                 dW(y_ary, x_ary, u1_ary, u2_ary), y_ary, axis=0
+        #                 dW(y_ary, x_ary, sp_ary, sm_ary), y_ary, axis=0
         #             )
 
         #         integ_dW = self.integ_dW_cached 
@@ -607,42 +502,346 @@ class Fluctuations:
         #     else: 
 
         #         integ_dW = np.trapz(
-        #             dW(y_ary, x_ary, u1_ary, u2_ary), y_ary, axis=0
+        #             dW(y_ary, x_ary, sp_ary, sm_ary), y_ary, axis=0
         #         )
 
+        #     f_u1 = np.array([[
+        #         self.f_v((sp + sm) * self.v_fluc.sigma1D) for sm in sm_ary
+        #         ] for sp in sp_ary
+        #     ])
+
+        #     f_u2 = np.array([[
+        #         self.f_v((sp - sm) * self.v_fluc.sigma1D) for sm in sm_ary
+        #         ] for sp in sp_ary
+        #     ])
+
         #     return integ_dW, np.einsum(
-        #         'ijk,j...,k...->ijk...', integ_dW, 
-        #         self.f_v(u1_ary * self.v_fluc.sigma1D),
-        #         self.f_v(u2_ary * self.v_fluc.sigma1D)
+        #         'ijk,jk...,jk...->ijk...', integ_dW, 
+        #         f_u1, f_u2
         #     )
 
-        # # return np.trapz(
+        # # res = 2 * np.trapz(
         # #     np.trapz(
-        # #         np.trapz(
-        # #             dff(y_ary, x_ary, u_ary, u_ary), y_ary, axis=0
-        # #         ),
-        # #         u_ary, axis=2
-        # #     ), 
-        # #     u_ary, axis=3
+        # #         int_y_dff(y_ary, x_ary, sp_ary, sm_ary), sp_ary, axis=1
+        # #     ), sm_ary, axis=1
         # # )
 
-        # # res = np.trapz(
-        # #     np.trapz(
-        # #         int_y_dff(y_ary, x_ary, u_ary, u_ary), u_ary, axis=1
-        # #     ), u_ary, axis=1
-        # # )
+        # # return res
+
+        # res = 2 * np.trapz(
+        #     np.trapz(
+        #         int_y_dff(y_ary, x_ary, sp_ary, sm_ary)[1], sp_ary, axis=1
+        #     ), sm_ary, axis=1
+        # )
+
+        # return int_y_dff(y_ary, x_ary, sp_ary, sm_ary), res
+
+        def get_mesh(u_ary=u_ary): 
+
+            mesh = []
+
+            for i,u in enumerate(u_ary): 
+
+                low_bound = 0
+                upp_bound = u_ary[-1] 
+
+                # if i > 0: 
+
+                #     low_bound = (u_ary[i-1] + u) / 2. 
+
+                # if i < len(u_ary) - 1:
+
+                #     upp_bound = (u + u_ary[i+1]) / 2.
+
+                # bin_length = upp_bound - low_bound 
+                
+                # if i > 0 and i < len(u_ary) - 1: 
+
+                #     bins = u + np.concatenate((
+                #             - np.flipud(np.logspace(-3, 0, 27)) * bin_length / 2,
+                #             [0],
+                #             np.logspace(-3, 0, 27) * bin_length / 2
+                #     ))
+
+                #     new_ary = np.concatenate((u_ary[:i], bins, u_ary[i+1:]))
+
+                # elif i == 0: 
+
+                #     bins = u + np.concatenate((
+                #             [0],
+                #             np.logspace(-3, 0, 54) * bin_length
+                #     ))
+
+                #     new_ary = np.concatenate((bins, u_ary[1:]))
+
+                # elif i == len(u_ary) - 1: 
+
+                #     bins = u + np.concatenate((
+                #             - np.flipud(np.logspace(-3, 0, 54)) * bin_length,
+                #             [0]
+                #     ))
+
+                #     new_ary = np.concatenate((u_ary[:-1], bins))
+
+                if i > 0: 
+
+                    low_bound = u_ary[i-1]
+
+                if i < len(u_ary) - 1:
+
+                    upp_bound = u_ary[i+1]
+
+                bin_length = upp_bound - low_bound 
+                
+                if i > 0 and i < len(u_ary) - 1: 
+
+                    bins = u + np.concatenate((
+                            - np.flipud(np.logspace(-3, 0, 17)) * bin_length / 2,
+                            [0],
+                            np.logspace(-3, 0, 17) * bin_length / 2
+                    ))
+
+                    new_ary = np.concatenate((u_ary[:i], bins[1:-1], u_ary[i+1:]))
+
+                elif i == 0: 
+
+                    bins = u + np.concatenate((
+                            [0],
+                            np.logspace(-3, 0, 33) * bin_length
+                    ))
+
+                    new_ary = np.concatenate((bins[:-1], u_ary[1:]))
+
+                elif i == len(u_ary) - 1: 
+
+                    bins = u + np.concatenate((
+                            - np.flipud(np.logspace(-3, 0, 33)) * bin_length,
+                            [0]
+                    ))
+
+                    new_ary = np.concatenate((u_ary[:-1], bins[1:]))
+
+                mesh.append(new_ary)
+
+
+
+            # dimensions u1_ary x u2_ary after transposition. 
+            return np.transpose(mesh)
+
+
+        def dW(
+            y_ary=y_ary, x_ary=x_ary, u1_ary=u_ary, u2_ary=u_ary, fine_mesh=True
+        ): 
+
+            one_minus_R_sq = 1. - R(y_ary, x_ary)**2 
+
+            if fine_mesh: 
+
+                u1_ary = get_mesh(u2_ary)
+
+                u1_sq_plus_u2_sq = u1_ary**2 + u2_ary[None,:]**2 
+
+                term_1 = np.einsum(
+                    'ij,kl,l->ijkl', 
+                    1./(R(y_ary, x_ary)*np.sqrt(one_minus_R_sq)), u1_ary, u2_ary
+                ) / np.pi
+
+                term_2a_exp = np.einsum(
+                    'ij,kl->ijkl', 1. / (2 * one_minus_R_sq), -u1_sq_plus_u2_sq
+                )
+
+                term_2b_exp = np.einsum(
+                    'ij,kl,l->ijkl', 2 * R(y_ary, x_ary) / (2 * one_minus_R_sq),
+                    u1_ary, u2_ary
+                )
+
+                dW_zero_R = np.einsum(
+                    'ij,kl,kl,l->ijkl',
+                    np.ones_like(one_minus_R_sq),
+                    np.exp(-u1_sq_plus_u2_sq/2) / np.pi, u1_ary**2, u2_ary**2
+                )
+
+                small_R_term = np.einsum(
+                    'ij,kl,kl,l->ijkl',
+                    R(y_ary, x_ary)**2, 
+                    np.exp(-u1_sq_plus_u2_sq / 2) / 6. / np.pi, 
+                    u1_ary**2 * (u1_ary**2 - 3.), u2_ary**2 * (u2_ary**2 - 3),
+                )
+
+            else:
+
+                u1_sq_plus_u2_sq = u1_ary[:,None]**2 + u2_ary[None,:]**2 
+
+                term_1 = np.einsum(
+                    'ij,k,l->ijkl', 
+                    1./(R(y_ary, x_ary)*np.sqrt(one_minus_R_sq)), u1_ary, u2_ary
+                ) / np.pi
+
+                # term_2a_exp = np.einsum(
+                #     'ij,kl->ijkl', 1. / (2 * one_minus_R_sq), -u1_sq_plus_u2_sq
+                # )
+
+                # term_2b_exp = np.einsum(
+                #     'ij,k,l->ijkl', 2 * R(y_ary, x_ary) / (2 * one_minus_R_sq),
+                #     u1_ary, u2_ary
+                # )
+                u1_minus_u2 = u1_ary[:,None] - u2_ary[None,:]
+
+                term_2a_exp = np.einsum(
+                    'ij,kl -> ijkl',
+                    1. / (2 * one_minus_R_sq), -u1_minus_u2**2
+                )
+
+                term_2b_exp = np.einsum(
+                    'ij,k,l->ijkl',
+                    1./(1. + R(y_ary, x_ary)), u1_ary, u2_ary
+                )
+
+
+                dW_zero_R = np.einsum(
+                    'ij,kl,k,l->ijkl',
+                    np.ones_like(one_minus_R_sq),
+                    np.exp(-u1_sq_plus_u2_sq/2) / np.pi, u1_ary**2, u2_ary**2
+                )
+
+
+            term_2 = 0.5*np.exp(term_2a_exp + term_2b_exp)
+
+            term_3 = 1. - np.exp(-2*term_2b_exp)
+
+            # print(one_minus_R_sq[1,0])
+            # print(term_2b_exp[1,0,:,1])
+
+            # print(term_2a_exp[0,0,:,-3], term_2b_exp[0,0,:,-3])
+            # test = term_1 * term_2 * term_3
+            # print(test[0,0,:,-3], dW_zero_R[0,0,:,-3])
+
+            large_R_term = term_1 * term_2 * term_3 - dW_zero_R 
+
+            mask = np.zeros_like(large_R_term) + R(y_ary, x_ary)[:,:,None,None]
+            
+            large_R_mask = np.ones_like(mask)
+            small_R_mask = np.ones_like(mask)
+            
+            large_R_mask[mask < 0.1] *= 0
+            small_R_mask[mask >= 0.1] *= 0
+            
+            return large_R_term*large_R_mask + small_R_term*small_R_mask
+
+        def dff(
+            y_ary=y_ary, x_ary=x_ary, u1_ary=u_ary, u2_ary=u_ary, fine_mesh=True
+        ):
+
+            if fine_mesh: 
+
+                u1_ary = get_mesh(u2_ary)
+
+                f_v_u1 = np.array([
+                    self.f_v(u1_vec * self.v_fluc.sigma1D) for u1_vec in u1_ary
+                ])
+
+                f_v_u2 = self.f_v(u2_ary * self.v_fluc.sigma1D)
+
+                return np.einsum(
+                    'ijkl,kl...,l...->ijkl...',
+                    dW(y_ary, x_ary, u1_ary, u2_ary, fine_mesh=True),
+                    f_v_u1, f_v_u2 
+                )
+
+            return np.einsum(
+                'ijkl,k...,l...->ijkl...',
+                dW(y_ary, x_ary, u1_ary, u2_ary), 
+                self.f_v(u1_ary * self.v_fluc.sigma1D),
+                self.f_v(u2_ary * self.v_fluc.sigma1D)
+            )
+
+        def int_y_dff(
+            y_ary=y_ary, x_ary=x_ary, u1_ary=u_ary, u2_ary=u_ary, fine_mesh=True
+        ):
+
+            if np.array_equal(x_ary, self.x_numerical_ary): 
+
+                if self.integ_dW_cached is None: 
+
+                    self.integ_dW_cached = np.trapz(
+                        dW(y_ary, x_ary, u1_ary, u2_ary, fine_mesh=fine_mesh),
+                        y_ary, axis=0
+                    )
+
+                integ_dW = self.integ_dW_cached 
+            
+            else: 
+
+                integ_dW = np.trapz(
+                    dW(y_ary, x_ary, u1_ary, u2_ary, fine_mesh=fine_mesh), 
+                    y_ary, axis=0
+                )
+
+            if fine_mesh: 
+
+                u1_ary = get_mesh(u2_ary)
+
+                f_v_u1 = np.array([
+                    self.f_v(u1_vec * self.v_fluc.sigma1D) for u1_vec in u1_ary
+                ])
+
+                f_v_u2 = self.f_v(u2_ary * self.v_fluc.sigma1D)
+
+                return np.einsum(
+                    'ijk,jk...,k...->ijk...', integ_dW,
+                    f_v_u1, f_v_u2
+                )
+
+            else:
+
+                return np.einsum(
+                    'ijk,j...,k...->ijk...', integ_dW, 
+                    self.f_v(u1_ary * self.v_fluc.sigma1D),
+                    self.f_v(u2_ary * self.v_fluc.sigma1D)
+                )
+
+        # return np.trapz(
+        #     np.trapz(
+        #         np.trapz(
+        #             dff(y_ary, x_ary, u_ary, u_ary), y_ary, axis=0
+        #         ),
+        #         u_ary, axis=2
+        #     ), 
+        #     u_ary, axis=3
+        # )
 
         # res = np.trapz(
         #     np.trapz(
-        #         int_y_dff(y_ary, x_ary, u_ary, u_ary)[1], u_ary, axis=1
+        #         int_y_dff(y_ary, x_ary, u_ary, u_ary), u_ary, axis=1
         #     ), u_ary, axis=1
         # )
 
-        # return int_y_dff(y_ary, x_ary, u_ary, u_ary), res
+        integrand = int_y_dff(y_ary, x_ary, u_ary, u_ary, fine_mesh=fine_mesh)
+
+        if fine_mesh: 
+
+            u1_ary = get_mesh(u_ary)
+
+            inner_int = np.array([
+                np.trapz(integrand[:,:,i,...], u1_ary[:,i], axis=1) 
+                    for i,_ in enumerate(u_ary)
+                ]
+            )
+
+            # inner_int now has dimensions u_ary x x_ary x ...
+
+            res = np.trapz(inner_int, u_ary, axis=0)
+
+        else: 
+
+            res = np.trapz(
+                np.trapz(
+                    int_y_dff(y_ary, x_ary, u_ary, u_ary, fine_mesh=fine_mesh), u_ary, axis=1
+                ), u_ary, axis=1
+            )
+
+        return res
         
-
-        # return res
-
     def xi_f_large_dist(self, x_ary): 
         """Numerical calculation of the correlation function at large distances. 
 
@@ -660,7 +859,7 @@ class Fluctuations:
         return np.squeeze(np.einsum(
             'i,j... -> ij...',
             self.v_fluc.xi_v2(x_ary) / self.v_fluc.sigma3D**4, 
-            np.atleast_1d(self.b**2 * self.mean**2)
+            np.atleast_1d(self.b**2)
         ))
 
     def xi_f_short_dist(self, x_ary): 
@@ -688,7 +887,7 @@ class Fluctuations:
             np.atleast_1d(self.mean_df_dv_sq) * self.v_fluc.sigma1D**2 
         ))
 
-    def xi_f(self, x_ary=None, short_thres=0.5, large_thres=300., interp=True): 
+    def xi_f(self, x_ary=None, short_thres=0.001, large_thres=300., interp=True, fine_mesh=True): 
         """Correlation function. 
 
         xi_f has units of f^2. Combines the short, numerical and long distance 
@@ -714,7 +913,7 @@ class Fluctuations:
         if self.xi_f_int is None: 
 
             xi_f_short_ary       = self.xi_f_short_dist(self.x_short_ary)
-            xi_f_numerical_ary   = self.xi_f_numerical(self.x_numerical_ary) 
+            xi_f_numerical_ary   = self.xi_f_numerical(self.x_numerical_ary, fine_mesh=fine_mesh) 
             xi_f_large_ary       = self.xi_f_large_dist(self.x_large_ary) 
 
             # xi_f_short_inter_ary = self.xi_f_short_dist(x_numerical_ary)
@@ -780,7 +979,7 @@ class Fluctuations:
 
             inter_x_ary = x_ary[(x_ary >= short_thres) & (x_ary <= large_thres)]
 
-            xi_f_computed_ary = self.xi_f_numerical(inter_x_ary)
+            xi_f_computed_ary = self.xi_f_numerical(inter_x_ary, fine_mesh=fine_mesh)
 
             # inter_length = large_thres - short_thres
 
