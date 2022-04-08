@@ -319,10 +319,11 @@ class Fluctuations:
         self.f_ary = f_ary 
 
         # Default binning for constructing correlation function interpolation. 
-        self.x_short_ary = np.arange(0, 30, 0.1)
+        self.x_short_ary = np.arange(0, 1.2e-3, 1e-4)
         self.x_numerical_ary = np.concatenate((
-            np.logspace(-4, -2, num=10)[:-1],
-            np.logspace(-2, np.log10(301.), num=200)
+            np.logspace(-3.3, 0, num=40)[:-1],
+            np.logspace(0, 2, num=30)[1:-1],
+            np.logspace(2, np.log10(301.), num=170)
         ))
         self.x_large_ary = np.concatenate((
             np.logspace(1, 2, num=100)[:-1],
@@ -334,11 +335,11 @@ class Fluctuations:
 
         self.f_in_v    = interp1d(v_ary, f_ary, axis=0, kind=2, bounds_error=False, fill_value=0.)
 
-        self.mean   = self.v_fluc.mean_f(self.f_in_v, v_ary) 
+        f_in_mean   = self.v_fluc.mean_f(self.f_in_v, v_ary) 
         
 
         # Subtract out the mean. 
-        self.f_minus_mean_ary = f_ary - self.mean 
+        self.f_minus_mean_ary = f_ary - f_in_mean 
 
         self.f_v = interp1d(
             v_ary, self.f_minus_mean_ary, axis=0, kind=2, 
@@ -392,7 +393,8 @@ class Fluctuations:
         # all_pts_ary = np.union1d(sp_ary, sm_sub_ary)
         # sm_ary = all_pts_ary[all_pts_ary <= u_ary[-1]/2]
 
-        y_ary = np.linspace(-1, 1, 50)
+        # Symmetric about y = 0: just multiply by two later. 
+        y_ary = np.linspace(0, 1, 25)
 
         def R(y_ary=y_ary, x_ary=x_ary): 
             # y = cos theta
@@ -596,9 +598,9 @@ class Fluctuations:
                 if i > 0 and i < len(u_ary) - 1: 
 
                     bins = u + np.concatenate((
-                            - np.flipud(np.logspace(-3, 0, 17)) * bin_length / 2,
+                            - np.flipud(np.logspace(-3, 0, 37)) * bin_length / 2,
                             [0],
-                            np.logspace(-3, 0, 17) * bin_length / 2
+                            np.logspace(-3, 0, 37) * bin_length / 2
                     ))
 
                     new_ary = np.concatenate((u_ary[:i], bins[1:-1], u_ary[i+1:]))
@@ -607,7 +609,7 @@ class Fluctuations:
 
                     bins = u + np.concatenate((
                             [0],
-                            np.logspace(-3, 0, 33) * bin_length
+                            np.logspace(-3, 0, 73) * bin_length
                     ))
 
                     new_ary = np.concatenate((bins[:-1], u_ary[1:]))
@@ -615,7 +617,7 @@ class Fluctuations:
                 elif i == len(u_ary) - 1: 
 
                     bins = u + np.concatenate((
-                            - np.flipud(np.logspace(-3, 0, 33)) * bin_length,
+                            - np.flipud(np.logspace(-3, 0, 73)) * bin_length,
                             [0]
                     ))
 
@@ -716,7 +718,7 @@ class Fluctuations:
             # test = term_1 * term_2 * term_3
             # print(test[0,0,:,-3], dW_zero_R[0,0,:,-3])
 
-            large_R_term = term_1 * term_2 * term_3 - dW_zero_R 
+            large_R_term = term_1 * term_2 * term_3 - 0*dW_zero_R 
 
             mask = np.zeros_like(large_R_term) + R(y_ary, x_ary)[:,:,None,None]
             
@@ -840,7 +842,8 @@ class Fluctuations:
                 ), u_ary, axis=1
             )
 
-        return res
+        # Factor of 2 from angle integral. 
+        return 2 * res
         
     def xi_f_large_dist(self, x_ary): 
         """Numerical calculation of the correlation function at large distances. 
@@ -934,15 +937,15 @@ class Fluctuations:
 
 
             xi_f_small_int = interp1d(
-                self.x_short_ary, xi_f_short_ary, axis=0, kind=9
+                self.x_short_ary, xi_f_short_ary, axis=0, kind=1
             )
 
             xi_f_numerical_int = interp1d(
-                self.x_numerical_ary, xi_f_numerical_ary, axis=0, kind=9
+                self.x_numerical_ary, xi_f_numerical_ary, axis=0, kind=1
             )
 
             xi_f_large_int = interp1d(
-                self.x_large_ary, xi_f_large_ary, axis=0, kind=9
+                self.x_large_ary, xi_f_large_ary, axis=0, kind=1
             )
 
             def interp_func(xx_ary):
