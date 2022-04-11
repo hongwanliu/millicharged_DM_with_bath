@@ -729,15 +729,15 @@ class Fluctuations:
 
 
             xi_f_small_int = interp1d(
-                self.x_short_ary, xi_f_short_ary, axis=0, kind=5
+                self.x_short_ary, xi_f_short_ary, axis=0, kind=3
             )
 
             xi_f_numerical_int = interp1d(
-                self.x_numerical_ary, xi_f_numerical_ary, axis=0, kind=5
+                self.x_numerical_ary, xi_f_numerical_ary, axis=0, kind=3
             )
 
             xi_f_large_int = interp1d(
-                self.x_large_ary, xi_f_large_ary, axis=0, kind=5
+                self.x_large_ary, xi_f_large_ary, axis=0, kind=3
             )
 
             def interp_func(xx_ary):

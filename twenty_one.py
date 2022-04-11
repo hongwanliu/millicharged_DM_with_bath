@@ -19,7 +19,7 @@ def xA_eff(z_ary, xA_ary, Tb_ary):
     z_ary : ndarray
         Array of redshifts z. 
     xA_ary : ndarray
-        Array of Lyman-alpha couplings, dimensions z_ary. 
+        Array of Lyman-alpha couplings, dimensions ... x z_ary. 
     Tb_ary : ndarray
         Array of baryon temperatures in K, dimensions ... x z_ary. 
     Returns
@@ -86,7 +86,7 @@ def T21(z_ary, xA_ary, Tb_ary, TS_equal_Tb=False):
     z_ary : ndarray
         Array of redshifts z. 
     xA_ary : ndarray
-        Array of Lyman-alpha couplings, dimensions z_ary. 
+        Array of Lyman-alpha couplings, dimensions ... x z_ary. 
     Tb_ary : ndarray
         Array of baryon temperatures in K, dimensions ... x z_ary. 
     TS_equal_Tb : bool
