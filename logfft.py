@@ -69,20 +69,29 @@ def fftj0(f, logrmin, logrmax, n_pts=4096, q=0):
     # ar_ary has dimensions ... x r_ary. 
     ar_ary = np.moveaxis(f(r_ary), 0, -1) * (r_ary)**(1.5 - q)
 
+    # dimensions ... x r_ary
     ak_ary = np.zeros(ar_ary.shape) 
 
-    indices_ary = np.moveaxis(np.indices(ak_ary[...,0].shape), 0, -1)
+    if len(ak_ary.shape) > 1: 
+    
+        # Array of indices, dimensions ... x 2
+        indices_ary = np.moveaxis(np.indices(ak_ary[...,0].shape), 0, -1)
 
-    for ind in indices_ary.reshape(-1, indices_ary.shape[-1]): 
+        for ind in indices_ary.reshape(-1, indices_ary.shape[-1]): 
 
-        if ind.shape == ():
+            if ind.shape == ():
 
-            ak_ary[ind] = (2*np.pi)**1.5 * k_ary**(-1.5-q) * pyfftlog.fht(ar_ary[ind].copy(), xsave, tdir)
+                ak_ary[ind] = (2*np.pi)**1.5 * k_ary**(-1.5-q) * pyfftlog.fht(ar_ary[ind].copy(), xsave, tdir)
 
-        else:
+            else:
 
-            ak_ary[tuple(ind)] = (2*np.pi)**1.5 * k_ary**(-1.5-q) * pyfftlog.fht(ar_ary[tuple(ind)].copy(), xsave, tdir)
+                ak_ary[tuple(ind)] = (2*np.pi)**1.5 * k_ary**(-1.5-q) * pyfftlog.fht(ar_ary[tuple(ind)].copy(), xsave, tdir)
 
+    else: 
+
+        ak_ary = (2*np.pi)**1.5 * k_ary**(-1.5-q) * pyfftlog.fht(ar_ary.copy(), xsave, tdir)
+
+    # Return as dimension ... x k_ary
     return (k_ary, ak_ary)
 
 

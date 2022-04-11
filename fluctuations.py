@@ -646,11 +646,17 @@ class Fluctuations:
         -------
         """ 
 
-        return np.einsum(
+        res = np.einsum(
             'i,j... -> ij...',
             self.v_fluc.xi_v2(x_ary) / self.v_fluc.sigma3D**4, 
             np.atleast_1d(self.b**2)
         )
+
+        target_shape = np.concatenate((
+            [len(x_ary)], np.array(self.f_ary.shape)[1:]
+        ))
+
+        return np.reshape(res, target_shape)
 
     def xi_f_short_dist(self, x_ary): 
         """Numerical calculation of the correlation function at small distances. 
@@ -671,11 +677,17 @@ class Fluctuations:
             self.v_fluc.cparint(x_ary)**2 + 2 * self.v_fluc.cperpint(x_ary)**2
         )
 
-        return self.var - np.einsum(
+        res = self.var - np.einsum(
             'i,j... -> ij...',
             1. / 6. * tr_one_minus_c2, 
             np.atleast_1d(self.mean_df_dv_sq) * self.v_fluc.sigma1D**2 
         )
+
+        target_shape = np.concatenate((
+            [len(x_ary)], np.array(self.f_ary.shape)[1:]
+        ))
+
+        return np.reshape(res, target_shape)
 
     def xi_f(self, x_ary=None, short_thres=0.001, large_thres=300., interp=True, fine_mesh=True): 
         """Correlation function. 
@@ -731,7 +743,7 @@ class Fluctuations:
                 ) 
 
                 dim_exceed = np.concatenate(
-                    (xx_ary[xx_ary > 1e3].shape, small[0,:].shape)
+                    ([len(xx_ary[xx_ary > 1e3])], np.array(small.shape)[1:])
                 )
                 exceed    = np.zeros(dim_exceed)
 
@@ -800,7 +812,9 @@ class Fluctuations:
 
             (k_fft, P_fft) = logfft.fftj0(self.xi_f_int, logrmin, logrmax)
 
-            return (k_fft, P_fft * k_fft**3 / (2 * np.pi**2))
+            res = np.moveaxis(P_fft * k_fft**3 / (2 * np.pi**2), -1, 0)
+
+            return (k_fft, res)
 
         else:
         
