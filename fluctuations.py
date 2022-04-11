@@ -273,7 +273,7 @@ class Velocity_Fluctuations:
 
 class Fluctuations:
 
-    def __init__(self, v_ary, f_ary, sigma3D=29.): 
+    def __init__(self, v_ary, f_ary, data_dict=None, sigma3D=29.): 
         """Structure for fluctuations. 
 
         Although written with T21 in mind, can be extended to anything. 
@@ -284,6 +284,8 @@ class Fluctuations:
             Baryon-CDM relative velocity abscissa in km/s.  
         f_ary : ndarray
             Function values, e.g. baryon temperature in K, dimensions v_ary x ... . 
+        data_dict : dictionary
+            Data points describing the entries in f_ary, dimensions ... . 
         sigma3D : float
             3D velocity dispersion in km/s. 
 
@@ -313,10 +315,14 @@ class Fluctuations:
             x_numerical_ary x v_ary x v_ary. 
         xi_f_int : function
             Interpolation function for spatial correlation function, units f^2. 
+        power_spec : tuple of ndarrays
+            Dimensionless power spectrum, units f^2. First entry contains k-values in Mpc^-1, 
+            second entry contains the power spectrum, dimension k_ary x ... . 
         """
 
         self.v_ary = v_ary
         self.f_ary = f_ary 
+        self.data_dict = data_dict
 
         # Default binning for constructing correlation function interpolation. 
         self.x_short_ary = np.arange(0, 1.2e-3, 1e-4)
@@ -333,7 +339,7 @@ class Fluctuations:
 
         self.v_fluc = Velocity_Fluctuations(sigma3D=sigma3D)
 
-        self.f_in_v    = interp1d(v_ary, f_ary, axis=0, kind=2, bounds_error=False, fill_value=0.)
+        self.f_in_v = interp1d(v_ary, f_ary, axis=0, kind=2, bounds_error=False, fill_value=0.)
 
         f_in_mean   = self.v_fluc.mean_f(self.f_in_v, v_ary) 
         
@@ -362,6 +368,9 @@ class Fluctuations:
 
         # Will be initialized with first call of self.xi_f
         self.xi_f_int = None
+
+        # Will be initialized with first call of Delta2_f
+        self.power_spec = None
 
     def xi_f_numerical(self, x_ary, fine_mesh=True): 
         """Numerical calculation of the correlation function. 
@@ -804,6 +813,10 @@ class Fluctuations:
         ndarray
         """
 
+        if self.power_spec is not None: 
+
+            return self.power_spec 
+
         if self.xi_f_int is None: 
 
             self.xi_f() 
@@ -814,7 +827,11 @@ class Fluctuations:
 
             res = np.moveaxis(P_fft * k_fft**3 / (2 * np.pi**2), -1, 0)
 
-            return (k_fft, res)
+            if self.power_spec is None: 
+
+                self.power_spec = (k_fft, res)
+
+            return self.power_spec 
 
         else:
         
