@@ -114,7 +114,7 @@ def T21(z_ary, xA_ary, Tb_ary, TS_equal_Tb=False):
     # Spin temperature
     T_s_ary = T_CMB_ary / (1. - TS_to_Tb_fac * (1. - T_CMB_ary / Tb_ary))
 
-    # Optical depth 
+    # Optical depth: 1605.04357 Eq. (39)
     tau_ary = (
         9.85e-3 * (T_CMB_ary / T_s_ary) * (omega_b_h / 0.0327) 
         * (phys.omega_m / 0.307)**(-0.5) * np.sqrt((1. + z_ary) / 10.)
