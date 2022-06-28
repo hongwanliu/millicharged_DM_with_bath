@@ -9,7 +9,7 @@ import logfft
 
 import warnings
 
-corrs=np.loadtxt(open('../correlations.dat'), delimiter="\t")
+corrs=np.loadtxt(open('./correlations.dat'), delimiter="\t")
 
 class Velocity_Fluctuations: 
     """Structure for velocity fluctuations. 
