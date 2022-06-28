@@ -78,6 +78,51 @@ def xc(z_ary, Tb_ary):
         * T_star / 3. / A10 / (phys.TCMB(1. + z_ary) / phys.kB)
     )
 
+def TS(z_ary, xA_ary, Tb_ary, TS_equal_Tb=False): 
+    """Spin temperature.  
+
+    Parameters
+    ----------
+    z_ary : ndarray
+        Array of redshifts z. 
+    xA_ary : ndarray
+        Array of Lyman-alpha couplings, dimensions ... x z_ary. 
+    Tb_ary : ndarray
+        Array of baryon temperatures in K, dimensions ... x z_ary. 
+    TS_equal_Tb : bool
+        If True, assumes TS = Tb. 
+    
+    Returns
+    -------
+    ndarray
+        Spin temperature in K. 
+    """
+
+    if TS_equal_Tb: 
+
+        return Tb_ary 
+
+    else: 
+
+        xA_eff_ary = xA_eff(z_ary, xA_ary, Tb_ary) 
+
+    xc_ary = xc(z_ary, Tb_ary) 
+
+    x_tot_ary = xA_eff_ary + xc_ary * 0 
+    
+    T_CMB_ary = phys.TCMB(1. + z_ary) / phys.kB
+
+    if not TS_equal_Tb:
+        TS_to_Tb_fac = x_tot_ary / (1. + x_tot_ary)
+    else: 
+        TS_to_Tb_fac = 1. 
+
+    # Spin temperature
+    return T_CMB_ary / (1. - TS_to_Tb_fac * (1. - T_CMB_ary / Tb_ary))
+    # return (1. + x_tot_ary) / (1. / T_CMB_ary + x_tot_ary / Tb_ary)
+
+
+
 def T21(z_ary, xA_ary, Tb_ary, TS_equal_Tb=False): 
     """21-cm brightness temperature.  
 
@@ -98,27 +143,19 @@ def T21(z_ary, xA_ary, Tb_ary, TS_equal_Tb=False):
         21-cm brightness temperature in K. 
     """
 
-    xA_eff_ary = xA_eff(z_ary, xA_ary, Tb_ary) 
-
-    xc_ary = xc(z_ary, Tb_ary) 
-
-    x_tot_ary = xA_eff_ary + xc_ary 
-    
     T_CMB_ary = phys.TCMB(1. + z_ary) / phys.kB
 
-    if not TS_equal_Tb:
-        TS_to_Tb_fac = x_tot_ary / (1. + x_tot_ary)
-    else: 
-        TS_to_Tb_fac = 1. 
-
-    # Spin temperature
-    T_s_ary = T_CMB_ary / (1. - TS_to_Tb_fac * (1. - T_CMB_ary / Tb_ary))
+    T_s_ary = TS(z_ary, xA_ary, Tb_ary, TS_equal_Tb=TS_equal_Tb)
 
     # Optical depth: 1605.04357 Eq. (39)
     tau_ary = (
         9.85e-3 * (T_CMB_ary / T_s_ary) * (omega_b_h / 0.0327) 
         * (phys.omega_m / 0.307)**(-0.5) * np.sqrt((1. + z_ary) / 10.)
     )
+    # tau_ary = (
+    #     3 * phys.c * (21.1 ** 2) * (2 * np.pi * phys.hbar) * 2.85e-15 * phys.nH * (1. + z_ary)**3 
+    #     / (32 * np.pi * phys.kB * T_s_ary * (1. + z_ary) * phys.hubble(1. + z_ary) / (1. + z_ary))
+    # )
 
     return (T_s_ary - T_CMB_ary) * (1. - np.exp(-tau_ary)) / (1. + z_ary)
 
