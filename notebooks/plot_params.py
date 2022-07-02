@@ -79,6 +79,7 @@ params = {'_internal.classic_mode': False,
           'axes.linewidth': 1.8,
           'axes.prop_cycle': cycler('color', sns.color_palette("Set1", 10, desat=0.7).as_hex()) + 
                             cycler(alpha=10*[.9]), 
+          # 'axes.prop_cycle': cycler('color', sns.color_palette('husl', 10).as_hex()),
           'axes.spines.bottom': True,
           'axes.spines.left': True,
           'axes.spines.right': True,
