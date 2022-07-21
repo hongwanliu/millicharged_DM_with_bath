@@ -148,15 +148,28 @@ def T21(z_ary, xA_ary, Tb_ary, TS_equal_Tb=False):
     T_s_ary = TS(z_ary, xA_ary, Tb_ary, TS_equal_Tb=TS_equal_Tb)
 
     # Optical depth: 1605.04357 Eq. (39)
-    tau_ary = (
-        9.85e-3 * (T_CMB_ary / T_s_ary) * (omega_b_h / 0.0327) 
-        * (phys.omega_m / 0.307)**(-0.5) * np.sqrt((1. + z_ary) / 10.)
-    )
+    # tau_ary = (
+    #     9.85e-3 * (T_CMB_ary / T_s_ary) * (omega_b_h / 0.0327) 
+    #     * (phys.omega_m / 0.307)**(-0.5) * np.sqrt((1. + z_ary) / 10.)
+    # )
     # tau_ary = (
     #     3 * phys.c * (21.1 ** 2) * (2 * np.pi * phys.hbar) * 2.85e-15 * phys.nH * (1. + z_ary)**3 
     #     / (32 * np.pi * phys.kB * T_s_ary * (1. + z_ary) * phys.hubble(1. + z_ary) / (1. + z_ary))
     # )
 
-    return (T_s_ary - T_CMB_ary) * (1. - np.exp(-tau_ary)) / (1. + z_ary)
+    # Use full expression. 
+    A_21     = 2.85e-15 # decay constant of excited state in sec^-1
+    omega_10 = 0.0681462 # hyperfine splitting in K
+    k_10     = omega_10 * phys.kB / (phys.hbar * phys.c)   # hyperfine splitting in cm^-1
+    
+    xi_ary = omega_10 / T_s_ary     
+
+    tau_ary = 3 * np.pi**2 * A_21 * phys.nH * (1. + z_ary)**3 / phys.hubble(1. + z_ary) / k_10**3 * (
+        (1. - np.exp(-xi_ary)) / (1. + 3. * np.exp(-xi_ary))
+    )
+
+    xi_corr_fac_ary = xi_ary * np.exp(-xi_ary) / (1. - np.exp(-xi_ary))
+
+    return (T_s_ary * xi_corr_fac_ary - T_CMB_ary) * (1. - np.exp(-tau_ary)) / (1. + z_ary)
 
 
