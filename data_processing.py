@@ -6,6 +6,8 @@ import os
 # Index for which of Anastasia's model to use
 idx = int(os.environ["SLURM_ARRAY_TASK_ID"])
 
+# idx = 0
+
 
 ##############################
 #           Preamble         #
