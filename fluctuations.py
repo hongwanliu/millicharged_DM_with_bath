@@ -1,6 +1,9 @@
 """ Calculating fluctuations from data. 
 """
 
+import sys
+sys.path.append('.')
+
 import numpy as np
 from scipy.interpolate import interp1d
 
@@ -9,7 +12,7 @@ import logfft
 
 import warnings
 
-corrs=np.loadtxt(open('./correlations.dat'), delimiter="\t")
+corrs=np.loadtxt(open('/Users/hongwan/GitHub/millicharged_DM_with_bath/correlations.dat'), delimiter="\t")
 
 class Velocity_Fluctuations: 
     """Structure for velocity fluctuations. 

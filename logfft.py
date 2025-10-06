@@ -4,7 +4,7 @@
 import numpy as np
 import pyfftlog 
 
-def fftj0(f, logrmin, logrmax, n_pts=4096, q=0):
+def fftj0(f, logrmin, logrmax, n_pts=4096, q=0, kr=1.):
     """Fourier transform of function a(r). 
 
     The actual integral computed is \int d^3 r a(r) j_0(k r), which is the Fourier transform for a function that only depends on magnitude of r. 
@@ -33,8 +33,8 @@ def fftj0(f, logrmin, logrmax, n_pts=4096, q=0):
     pyfftlog will evaluate \int dr k (kr)^q J_1/2(kr) a(r) (kr)^(3/2 - q), and the bias q can be set arbitrarily, although q = 0 usually gives the best performance. 
     """
 
-    # Sensible approximate choice of k_c r_c
-    kr = 1
+    # Sensible approximate choice of k_c r_c, default is kr = 1
+    # kr = 1
 
     # Tell fhti to change kr to low-ringing value
     # WARNING: kropt = 3 will fail, as interaction is not supported

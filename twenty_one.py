@@ -108,7 +108,7 @@ def TS(z_ary, xA_ary, Tb_ary, TS_equal_Tb=False):
 
     xc_ary = xc(z_ary, Tb_ary) 
 
-    x_tot_ary = xA_eff_ary + xc_ary * 0 
+    x_tot_ary = xA_eff_ary + xc_ary 
     
     T_CMB_ary = phys.TCMB(1. + z_ary) / phys.kB
 
